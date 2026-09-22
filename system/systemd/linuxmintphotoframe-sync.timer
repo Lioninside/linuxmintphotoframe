@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Linux Mint Photo Frame OneDrive Sync
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=2min
+AccuracySec=20s
+Unit=linuxmintphotoframe-sync.service
+
+[Install]
+WantedBy=timers.target

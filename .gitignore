@@ -1,0 +1,11 @@
+*.log
+*.tmp
+*.pyc
+__pycache__/
+.DS_Store
+Thumbs.db
+
+# Local/private runtime data. Real photos and messages live in OneDrive,
+# not in git.
+frame-data/
+state/

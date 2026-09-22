@@ -1,0 +1,9 @@
+[Unit]
+Description=Linux Mint Photo Frame OneDrive Sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/linuxmintphotoframe/env
+ExecStart=%h/linuxmintphotoframe/system/bin/onedrive_sync.sh

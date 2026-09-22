@@ -1,0 +1,14 @@
+[Unit]
+Description=Linux Mint Photo Frame Local Server
+After=graphical-session.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/linuxmintphotoframe/env
+ExecStart=/usr/bin/python3 %h/linuxmintphotoframe/system/bin/photoframe_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

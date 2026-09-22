@@ -1,0 +1,13 @@
+[Unit]
+Description=Linux Mint Photo Frame Firefox Kiosk
+After=graphical-session.target linuxmintphotoframe-server.service
+Wants=linuxmintphotoframe-server.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/linuxmintphotoframe/env
+ExecStart=%h/linuxmintphotoframe/system/bin/start_photoframe_kiosk.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target

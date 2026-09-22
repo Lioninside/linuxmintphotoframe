@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Linux Mint Photo Frame</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="stage" aria-live="polite">
+    <section id="photoLayer" class="photo-layer">
+      <img id="photoBlur" class="photo-blur" alt="">
+      <img id="photoMain" class="photo-main" alt="">
+    </section>
+
+    <section id="messageLayer" class="message-layer hidden">
+      <div id="messageCard" class="message-card">
+        <img id="messageImage" class="message-image hidden" alt="">
+        <div id="messageText" class="message-text"></div>
+      </div>
+    </section>
+
+    <section id="emptyLayer" class="empty-layer hidden">
+      <div>
+        <h1>Fotoframe wartet auf Bilder</h1>
+        <p>Fotos in den OneDrive-Ordner <strong>Fotoframe/photos</strong> legen.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "items": [
+    {
+      "id": "willkommen",
+      "text": "Willkommen beim neuen Bilderrahmen.",
+      "valid_from": "2026-01-01",
+      "valid_until": "2027-12-31",
+      "priority": false,
+      "every_minutes": 10,
+      "duration_sec": 30
+    }
+  ]
+}

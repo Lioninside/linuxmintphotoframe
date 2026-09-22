@@ -1,0 +1,15 @@
+[Unit]
+Description=Linux Mint Photo Frame Watchdog
+After=graphical-session.target linuxmintphotoframe-server.service
+Wants=linuxmintphotoframe-server.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/linuxmintphotoframe/env
+ExecStart=/usr/bin/python3 %h/linuxmintphotoframe/system/bin/kiosk_watchdog.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

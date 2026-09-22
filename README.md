@@ -47,6 +47,20 @@ rclone config
 # Type: Microsoft OneDrive
 ```
 
+Wenn der Kiosk bereits laeuft und Firefox/Fullscreen das Terminal verdeckt:
+
+```bash
+systemctl --user stop linuxmintphotoframe-watchdog.service
+pkill -TERM -f 'firefox/firefox|firefox-esr/firefox-esr' || true
+```
+
+Nach der Einrichtung wieder starten:
+
+```bash
+systemctl --user start linuxmintphotoframe-watchdog.service
+systemctl --user start linuxmintphotoframe-browser.service
+```
+
 Dann deployen:
 
 ```bash
@@ -80,6 +94,31 @@ systemctl --user restart linuxmintphotoframe-sync.service
 systemctl --user restart linuxmintphotoframe-server.service
 ```
 
+### OneDrive-Ordner initialisieren
+
+Wenn der Remote `onedrive` eingerichtet ist, aber der Ordner `Fotoframe` noch
+nicht existiert:
+
+```bash
+rclone mkdir onedrive:Fotoframe
+rclone mkdir onedrive:Fotoframe/photos
+rclone mkdir onedrive:Fotoframe/info
+rclone mkdir onedrive:Fotoframe/command
+
+rclone copy ~/linuxmintphotoframe/examples/config.json onedrive:Fotoframe
+rclone copy ~/linuxmintphotoframe/examples/news.json onedrive:Fotoframe
+rclone copy ~/linuxmintphotoframe/examples/info-images.json onedrive:Fotoframe
+```
+
+Pruefen:
+
+```bash
+rclone lsd onedrive:Fotoframe
+rclone ls onedrive:Fotoframe
+bash ~/linuxmintphotoframe/system/bin/onedrive_sync.sh
+ls -la ~/frame-data
+```
+
 ## Inhalte aktualisieren
 
 Alles passiert im OneDrive-Ordner `Fotoframe`.
@@ -105,6 +144,165 @@ info/*.png
 
 Der Mint synchronisiert alle zwei Minuten. Die Anzeige prueft den lokalen Stand
 regelmaessig und braucht normalerweise keinen Neustart.
+
+Manueller Sync-Test:
+
+```bash
+bash ~/linuxmintphotoframe/system/bin/onedrive_sync.sh
+tail -50 ~/state/rclone.log
+ls -la ~/frame-data
+ls -la ~/frame-data/photos
+```
+
+## Inhalte per Prompt erstellen
+
+Die einfachste Pflege laeuft so:
+
+1. Bestehende `news.json` oder `info-images.json` aus OneDrive oeffnen.
+2. Inhalt in ChatGPT/Codex einfuegen.
+3. Einen der Prompts unten verwenden.
+4. Die komplette neue JSON-Datei zurueck in OneDrive speichern.
+
+Wichtig:
+
+- Immer die komplette JSON-Datei ersetzen, nicht nur einen Ausschnitt.
+- Bestehende gueltige Eintraege behalten, ausser sie sollen bewusst weg.
+- Datum/Uhrzeit im Format `YYYY-MM-DD` oder `YYYY-MM-DDTHH:MM:SS`.
+- Zeiten sind lokale Schweizer Zeit auf dem Mint.
+- IDs klein und eindeutig schreiben, z.B. `pommes_freitag_2026_09_25`.
+- Keine sehr privaten Inhalte verwenden, wenn jemand anders Zugriff auf den
+  OneDrive-Ordner hat.
+
+### Prompt: Textmeldung
+
+```text
+Aktualisiere diese news.json fuer den Linux Mint Photo Frame.
+
+Ziel:
+- Neue Meldung: <was soll angezeigt werden>
+- Gueltig von: <Datum/Uhrzeit>
+- Gueltig bis: <Datum/Uhrzeit>
+- Prioritaet: <ja/nein>
+- Wenn keine Prioritaet: alle <X> Minuten zeigen
+- Anzeigedauer: <X> Sekunden
+
+Regeln:
+- Gib die komplette news.json zurueck.
+- Behalte bestehende Eintraege, ausser ich sage explizit loeschen.
+- Verwende schema_version 1.
+- Nutze klare, kurze, grosse-Bildschirm-taugliche Sprache.
+- Keine Erklaerung, nur JSON.
+
+Hier ist die aktuelle news.json:
+<JSON EINFUEGEN>
+```
+
+### Prompt: Viele Varianten zum gleichen Thema
+
+Gut fuer Erinnerungen, die haeufig erscheinen sollen, aber nicht immer gleich
+klingen.
+
+```text
+Erstelle 10 unterschiedliche Textmeldungen fuer news.json zum gleichen Thema.
+
+Thema:
+<Thema>
+
+Zeitraum:
+von <Datum/Uhrzeit> bis <Datum/Uhrzeit>
+
+Anzeige:
+- priority: <true/false>
+- every_minutes: <X>
+- duration_sec: <X>
+
+Ton:
+- freundlich
+- direkt
+- sehr gut lesbar
+- keine langen Saetze
+- keine Emojis
+
+Regeln:
+- Jede Meldung braucht eine eindeutige id.
+- Alle Meldungen sollen inhaltlich dasselbe Ziel haben, aber anders formuliert sein.
+- Gib die komplette news.json zurueck.
+- Keine Erklaerung, nur JSON.
+
+Hier ist die aktuelle news.json:
+<JSON EINFUEGEN>
+```
+
+### Prompt: Info-Bild Eintrag
+
+Dieser Prompt erstellt nur den JSON-Eintrag. Das PNG selbst muss in OneDrive
+unter `Fotoframe/info/` liegen.
+
+```text
+Aktualisiere diese info-images.json fuer den Linux Mint Photo Frame.
+
+Neues Info-Bild:
+- Dateiname im Ordner info/: <dateiname.png>
+- Bildtext/Captionsatz: <kurzer Text oder leer>
+- Gueltig von: <Datum/Uhrzeit>
+- Gueltig bis: <Datum/Uhrzeit>
+- Prioritaet: <ja/nein>
+- Wenn keine Prioritaet: alle <X> Minuten zeigen
+- Anzeigedauer: <X> Sekunden
+
+Regeln:
+- Gib die komplette info-images.json zurueck.
+- Behalte bestehende Eintraege, ausser ich sage explizit loeschen.
+- Verwende schema_version 1.
+- Keine Erklaerung, nur JSON.
+
+Hier ist die aktuelle info-images.json:
+<JSON EINFUEGEN>
+```
+
+### Prompt: Info-Bild gestalten
+
+Wenn ein neues PNG erstellt werden soll, zuerst das Bild prompten und danach den
+Eintrag in `info-images.json` anlegen.
+
+```text
+Erstelle ein schlichtes 16:9 Info-Bild fuer einen grossen Kiosk-Bildschirm.
+
+Text:
+<Text>
+
+Stil:
+- sehr gut lesbar aus Distanz
+- ruhiger Hintergrund
+- grosse kontrastreiche Schrift
+- keine kleinen Details
+- keine dekorativen Ueberladungen
+- Format 1920x1080 PNG
+```
+
+Danach die PNG-Datei nach OneDrive legen:
+
+```text
+Fotoframe/info/<dateiname.png>
+```
+
+und `info-images.json` aktualisieren.
+
+### Prompt: Aufraeumen
+
+```text
+Raeume diese news.json auf.
+
+Regeln:
+- Entferne abgelaufene Eintraege, deren valid_until vor <heutiges Datum> liegt.
+- Behalte zukuenftige und aktuell gueltige Eintraege.
+- Sortiere nach valid_from.
+- Gib die komplette news.json zurueck.
+- Keine Erklaerung, nur JSON.
+
+Hier ist die aktuelle news.json:
+<JSON EINFUEGEN>
+```
 
 ## Textmeldungen
 

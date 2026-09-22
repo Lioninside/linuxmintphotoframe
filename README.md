@@ -71,6 +71,22 @@ cd linuxmintphotoframe
 bash system/bin/kiosk_setup.sh
 ```
 
+## Code und Doku aktualisieren
+
+`~/linuxmintphotoframe` ist eine installierte Kopie, kein Git-Checkout. Darum
+funktioniert dort kein `git pull`. Updates laufen wie ein frisches Deploy:
+
+```bash
+cd /tmp
+rm -rf linuxmintphotoframe
+git clone https://github.com/Lioninside/linuxmintphotoframe.git
+cd linuxmintphotoframe
+bash system/bin/kiosk_setup.sh
+```
+
+Das Setup behaelt `~/.config/linuxmintphotoframe/env` bei. OneDrive-Konfig,
+lokale Daten unter `~/frame-data` und die rclone-Anmeldung bleiben erhalten.
+
 Das Setup schreibt bei Bedarf:
 
 ```text

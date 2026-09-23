@@ -188,6 +188,9 @@ Wichtig:
 - IDs klein und eindeutig schreiben, z.B. `pommes_freitag_2026_09_25`.
 - Keine sehr privaten Inhalte verwenden, wenn jemand anders Zugriff auf den
   OneDrive-Ordner hat.
+- Jede normale Textmeldung sollte mindestens zwei Varianten haben.
+- Tagesbezogene Meldungen bekommen `importance: "news"` und wenn moeglich `event_date`.
+- Allgemeiner Hintergrund-Content bekommt `importance: "filler"`.
 
 ### Prompt: Textmeldung
 
@@ -196,16 +199,21 @@ Aktualisiere diese news.json fuer den Linux Mint Photo Frame.
 
 Ziel:
 - Neue Meldung: <was soll angezeigt werden>
+- Art: <news oder filler>
+- Falls news mit konkretem Tag: event_date <YYYY-MM-DD>
 - Gueltig von: <Datum/Uhrzeit>
 - Gueltig bis: <Datum/Uhrzeit>
 - Prioritaet: <ja/nein>
-- Wenn keine Prioritaet: alle <X> Minuten zeigen
 - Anzeigedauer: <X> Sekunden
 
 Regeln:
 - Gib die komplette news.json zurueck.
+- Verwende schema_version 2.
 - Behalte bestehende Eintraege, ausser ich sage explizit loeschen.
-- Verwende schema_version 1.
+- Jede neue Meldung braucht mindestens 2 Varianten.
+- Bei event_date nutze variants_before und variants_today.
+- Formuliere variants_today mit "Heute ...".
+- Filler nutzt variants.
 - Nutze klare, kurze, grosse-Bildschirm-taugliche Sprache.
 - Keine Erklaerung, nur JSON.
 
@@ -219,17 +227,27 @@ Gut fuer Erinnerungen, die haeufig erscheinen sollen, aber nicht immer gleich
 klingen.
 
 ```text
-Erstelle 10 unterschiedliche Textmeldungen fuer news.json zum gleichen Thema.
+Erstelle mehrere unterschiedliche Varianten fuer einen news.json-Eintrag.
 
 Thema:
 <Thema>
+
+Art:
+<news oder filler>
+
+Falls news mit konkretem Tag:
+- event_date: <YYYY-MM-DD>
+- variants_before: mindestens 2 Varianten fuer vorher
+- variants_today: mindestens 2 Varianten fuer den Tag selbst, mit "Heute ..."
+
+Falls filler:
+- variants: mindestens 2 Varianten
 
 Zeitraum:
 von <Datum/Uhrzeit> bis <Datum/Uhrzeit>
 
 Anzeige:
 - priority: <true/false>
-- every_minutes: <X>
 - duration_sec: <X>
 
 Ton:
@@ -241,8 +259,8 @@ Ton:
 
 Regeln:
 - Jede Meldung braucht eine eindeutige id.
-- Alle Meldungen sollen inhaltlich dasselbe Ziel haben, aber anders formuliert sein.
 - Gib die komplette news.json zurueck.
+- Verwende schema_version 2.
 - Keine Erklaerung, nur JSON.
 
 Hier ist die aktuelle news.json:
@@ -320,28 +338,107 @@ Hier ist die aktuelle news.json:
 <JSON EINFUEGEN>
 ```
 
+### News-Schema
+
+`news.json` unterstuetzt zwei Arten von Textinhalt:
+
+```text
+importance: "news"    aktuelle oder bevorstehende Meldung
+importance: "filler"  Hintergrund-Content, wenn wenig Aktuelles da ist
+```
+
+Fuer Termine mit einem konkreten Tag `event_date` verwenden. Dann kann derselbe
+Eintrag vor dem Ereignis anders klingen als am Ereignistag:
+
+```json
+{
+  "id": "reinigung_freitag_2026_09_25",
+  "importance": "news",
+  "event_date": "2026-09-25",
+  "valid_from": "2026-09-23",
+  "valid_until": "2026-09-25",
+  "variants_before": [
+    "Am Freitag kommt die Reinigung.",
+    "Diese Woche kommt am Freitag wieder die Reinigung."
+  ],
+  "variants_today": [
+    "Heute kommt die Reinigung.",
+    "Heute ist Freitag, und die Reinigung kommt."
+  ],
+  "priority": false,
+  "duration_sec": 35
+}
+```
+
+Hintergrund-Content hat kein `event_date`, sondern normale Varianten:
+
+```json
+{
+  "id": "lars_sekundar",
+  "importance": "filler",
+  "valid_from": "2026-09-23",
+  "valid_until": "2026-12-31",
+  "variants": [
+    "Lars ist jetzt in der Sekundarschule.",
+    "Fuer Lars hat mit der Sekundarschule ein neuer Abschnitt begonnen."
+  ],
+  "priority": false,
+  "duration_sec": 35
+}
+```
+
+Auswahl:
+
+- `priority: true` stoppt Fotos und zeigt diese Meldung dominant.
+- Wenn heute gueltige News existieren, werden sie deutlich bevorzugt.
+- Bevorstehende News erscheinen gelegentlich.
+- Filler fuellt auf, besonders wenn keine Tages-News aktiv sind.
+- Eine Meldung wird nicht direkt zweimal hintereinander gezeigt.
+- Eine Variante wird ebenfalls nicht direkt zweimal hintereinander gezeigt.
+
 ## Textmeldungen
 
 Beispiel `news.json`:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "items": [
     {
-      "id": "pommes_freitag",
-      "text": "Bald werden Pommes geliefert. Unbedingt die Tuere oeffnen wenns laeutet.",
-      "valid_from": "2026-09-25T18:00:00",
-      "valid_until": "2026-09-25T22:00:00",
-      "priority": true,
-      "duration_sec": 45
+      "id": "reinigung_freitag_2026_09_25",
+      "importance": "news",
+      "event_date": "2026-09-25",
+      "valid_from": "2026-09-23",
+      "valid_until": "2026-09-25",
+      "variants_before": [
+        "Am Freitag kommt die Reinigung.",
+        "Diese Woche kommt am Freitag wieder die Reinigung."
+      ],
+      "variants_today": [
+        "Heute kommt die Reinigung.",
+        "Heute ist Freitag, und die Reinigung kommt."
+      ],
+      "priority": false,
+      "duration_sec": 35
+    },
+    {
+      "id": "lars_sekundar",
+      "importance": "filler",
+      "valid_from": "2026-09-23",
+      "valid_until": "2026-12-31",
+      "variants": [
+        "Lars ist jetzt in der Sekundarschule.",
+        "Fuer Lars hat mit der Sekundarschule ein neuer Abschnitt begonnen."
+      ],
+      "priority": false,
+      "duration_sec": 35
     }
   ]
 }
 ```
 
-`priority: true` stoppt die Fotos und zeigt die Meldung dominant. Ohne Prioritaet
-erscheint die Meldung als Zwischeneinblendung.
+Alte Eintraege mit nur `text` funktionieren weiterhin. Neue Eintraege sollten
+aber `variants` oder `variants_before`/`variants_today` verwenden.
 
 ## Info-Bilder
 

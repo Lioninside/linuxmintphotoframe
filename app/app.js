@@ -28,6 +28,7 @@
     photoIndex: -1,
     lastPhotoUrl: "",
     lastMessageId: "",
+    lastVariantKey: "",
     nextNormalMessageAt: 0,
     messageShownAt: {},
     messageVisibleUntil: 0,
@@ -86,6 +87,10 @@
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
+  function dateString(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
   function isActive(item, now) {
     const from = parseLocalDate(item.valid_from, false);
     const until = parseLocalDate(item.valid_until, true);
@@ -101,34 +106,105 @@
     return `/data/info/${encodeURIComponent(clean).replace(/%2F/g, "/")}`;
   }
 
+  function stringList(...values) {
+    return values
+      .flatMap((value) => Array.isArray(value) ? value : [value])
+      .map((value) => typeof value === "string" ? value.trim() : "")
+      .filter(Boolean);
+  }
+
+  function eventTiming(item, now) {
+    const event = parseLocalDate(item.event_date, false);
+    if (!event) return "none";
+    const today = dateString(now);
+    const eventDay = dateString(event);
+    if (today === eventDay) return "today";
+    return today < eventDay ? "before" : "after";
+  }
+
+  function variantsForItem(item, now) {
+    const timing = eventTiming(item, now);
+    if (timing === "today") {
+      return stringList(item.variants_today, item.today_variants, item.variants, item.text, item.bubble);
+    }
+    if (timing === "before") {
+      return stringList(item.variants_before, item.before_variants, item.variants, item.text, item.bubble);
+    }
+    if (timing === "after") {
+      return stringList(item.variants_after, item.after_variants, item.variants, item.text, item.bubble);
+    }
+    return stringList(item.variants, item.text, item.bubble);
+  }
+
+  function messageImportance(item) {
+    const raw = String(item.importance || item.kind || item.category || item.type || "").toLowerCase();
+    if (["background", "filler", "nice_to_have", "nice-to-have"].includes(raw)) return "filler";
+    if (["event", "news", "important", "reminder"].includes(raw)) return "news";
+    return item.event_date ? "news" : "filler";
+  }
+
+  function messageBucket(item, now) {
+    if (item.priority) return "priority";
+    if (messageImportance(item) === "filler") return "filler";
+    const timing = eventTiming(item, now);
+    if (timing === "today") return "today_news";
+    if (timing === "before") return "upcoming_news";
+    return "news";
+  }
+
+  function normalizeTextItem(item, now) {
+    const variants = variantsForItem(item, now);
+    if (!variants.length) return null;
+    const id = item.id || variants[0].slice(0, 48);
+    return {
+      id: `news:${id}`,
+      type: "text",
+      variants,
+      bucket: messageBucket(item, now),
+      priority: !!item.priority,
+      every_minutes: item.every_minutes,
+      duration_sec: item.duration_sec,
+      valid_from: item.valid_from,
+      valid_until: item.valid_until,
+      event_date: item.event_date,
+      importance: messageImportance(item)
+    };
+  }
+
+  function normalizeImageItem(item, now) {
+    const image = normalizeInfoImage(item.image);
+    const variants = stringList(item.caption_variants, item.variants, item.caption, item.text);
+    if (!image && !variants.length) return null;
+    const id = item.id || item.image || variants[0];
+    return {
+      id: `image:${id}`,
+      type: "image",
+      image,
+      variants,
+      bucket: messageBucket(item, now),
+      priority: !!item.priority,
+      every_minutes: item.every_minutes,
+      duration_sec: item.duration_sec,
+      valid_from: item.valid_from,
+      valid_until: item.valid_until,
+      event_date: item.event_date,
+      importance: messageImportance(item)
+    };
+  }
+
   function activeMessages(priorityOnly) {
     const now = new Date();
-    const textItems = (state.news || []).map((item) => ({
-      id: `news:${item.id || item.text}`,
-      type: "text",
-      text: item.text || item.bubble || "",
-      priority: !!item.priority,
-      every_minutes: item.every_minutes,
-      duration_sec: item.duration_sec,
-      valid_from: item.valid_from,
-      valid_until: item.valid_until
-    }));
+    const textItems = (state.news || [])
+      .filter((item) => isActive(item, now))
+      .map((item) => normalizeTextItem(item, now))
+      .filter(Boolean);
 
-    const imageItems = (state.infoImages || []).map((item) => ({
-      id: `image:${item.id || item.image}`,
-      type: "image",
-      image: normalizeInfoImage(item.image),
-      text: item.caption || item.text || "",
-      priority: !!item.priority,
-      every_minutes: item.every_minutes,
-      duration_sec: item.duration_sec,
-      valid_from: item.valid_from,
-      valid_until: item.valid_until
-    }));
+    const imageItems = (state.infoImages || [])
+      .filter((item) => isActive(item, now))
+      .map((item) => normalizeImageItem(item, now))
+      .filter(Boolean);
 
     return [...textItems, ...imageItems]
-      .filter((item) => item.text || item.image)
-      .filter((item) => isActive(item, now))
       .filter((item) => priorityOnly ? item.priority : !item.priority);
   }
 
@@ -137,6 +213,54 @@
     const candidates = items.filter((item) => item.id !== state.lastMessageId);
     const pool = candidates.length ? candidates : items;
     return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function weightedPick(groups) {
+    const available = groups.filter(([, items, weight]) => items.length && weight > 0);
+    if (!available.length) return null;
+    const total = available.reduce((sum, [, , weight]) => sum + weight, 0);
+    let r = Math.random() * total;
+    for (const [, items, weight] of available) {
+      r -= weight;
+      if (r < 0) return pickItem(items);
+    }
+    return pickItem(available[available.length - 1][1]);
+  }
+
+  function chooseNormalMessage(items) {
+    const groups = {
+      today: items.filter((item) => item.bucket === "today_news"),
+      upcoming: items.filter((item) => item.bucket === "upcoming_news" || item.bucket === "news"),
+      filler: items.filter((item) => item.bucket === "filler")
+    };
+
+    if (groups.today.length) {
+      return weightedPick([
+        ["today", groups.today, 0.70],
+        ["upcoming", groups.upcoming, 0.15],
+        ["filler", groups.filler, 0.15]
+      ]);
+    }
+
+    if (groups.upcoming.length) {
+      return weightedPick([
+        ["upcoming", groups.upcoming, 0.45],
+        ["filler", groups.filler, 0.55]
+      ]);
+    }
+
+    return pickItem(groups.filler);
+  }
+
+  function pickVariant(item) {
+    const variants = item.variants || [];
+    if (!variants.length) return "";
+    const indexed = variants.map((text, index) => ({ text, key: `${item.id}:${index}` }));
+    const candidates = indexed.filter((entry) => entry.key !== state.lastVariantKey);
+    const pool = candidates.length ? candidates : indexed;
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    state.lastVariantKey = picked.key;
+    return picked.text;
   }
 
   function hideMessage() {
@@ -161,7 +285,7 @@
       els.messageImage.removeAttribute("src");
     }
 
-    els.messageText.textContent = item.text || "";
+    els.messageText.textContent = pickVariant(item);
     els.messageLayer.classList.remove("hidden");
     state.messageVisibleUntil = Date.now() + seconds(item.duration_sec, fallbackDurationMs / 1000);
   }
@@ -240,7 +364,7 @@
         const lastShown = state.messageShownAt[item.id] || 0;
         return !lastShown || now - lastShown >= itemEveryMs;
       });
-      const item = pickItem(dueMessages.length ? dueMessages : normalMessages);
+      const item = chooseNormalMessage(dueMessages.length ? dueMessages : normalMessages);
       const quietMs = seconds(
         Number(item?.every_minutes || state.config.interstitial_every_minutes) * 60,
         DEFAULT_CONFIG.interstitial_every_minutes * 60

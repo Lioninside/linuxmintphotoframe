@@ -1,14 +1,34 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "items": [
     {
       "id": "willkommen",
-      "text": "Willkommen beim neuen Bilderrahmen.",
+      "importance": "filler",
       "valid_from": "2026-01-01",
       "valid_until": "2027-12-31",
+      "variants": [
+        "Willkommen beim neuen Bilderrahmen.",
+        "Schoen, dass der Bilderrahmen laeuft."
+      ],
       "priority": false,
-      "every_minutes": 10,
       "duration_sec": 30
+    },
+    {
+      "id": "beispiel_reinigung_freitag",
+      "importance": "news",
+      "event_date": "2026-09-25",
+      "valid_from": "2026-09-23",
+      "valid_until": "2026-09-25",
+      "variants_before": [
+        "Am Freitag kommt die Reinigung.",
+        "Diese Woche kommt am Freitag wieder die Reinigung."
+      ],
+      "variants_today": [
+        "Heute kommt die Reinigung.",
+        "Heute ist Freitag, und die Reinigung kommt."
+      ],
+      "priority": false,
+      "duration_sec": 35
     }
   ]
 }

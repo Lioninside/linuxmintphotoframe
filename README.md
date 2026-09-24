@@ -18,6 +18,7 @@ OneDrive/Fotoframe/
     familie-02.jpg
   news.json
   info-images.json
+  quiz.json
   info/
     pommes.png
     arzttermin.png
@@ -47,18 +48,25 @@ rclone config
 # Type: Microsoft OneDrive
 ```
 
-Wenn der Kiosk bereits laeuft und Firefox/Fullscreen das Terminal verdeckt:
+Wenn der Kiosk bereits installiert ist und Firefox/Fullscreen das Terminal verdeckt:
+
+```bash
+maintenance 10
+# falls die Shell den Befehl noch nicht kennt:
+~/.local/bin/maintenance 10
+```
+
+Das stoppt Browser und Watchdog fuer 10 Minuten. Der lokale Server und OneDrive-Sync laufen weiter. Vorzeitig wieder starten:
+
+```bash
+maintenance off
+```
+
+Falls `maintenance` auf einem alten Stand noch nicht existiert:
 
 ```bash
 systemctl --user stop linuxmintphotoframe-watchdog.service
-pkill -TERM -f 'firefox/firefox|firefox-esr/firefox-esr' || true
-```
-
-Nach der Einrichtung wieder starten:
-
-```bash
-systemctl --user start linuxmintphotoframe-watchdog.service
-systemctl --user start linuxmintphotoframe-browser.service
+pkill -TERM -f "$HOME/.mozilla/firefox-photoframe" || true
 ```
 
 Dann deployen:
@@ -124,6 +132,7 @@ rclone mkdir onedrive:Fotoframe/command
 rclone copy ~/linuxmintphotoframe/examples/config.json onedrive:Fotoframe
 rclone copy ~/linuxmintphotoframe/examples/news.json onedrive:Fotoframe
 rclone copy ~/linuxmintphotoframe/examples/info-images.json onedrive:Fotoframe
+rclone copy ~/linuxmintphotoframe/examples/quiz.json onedrive:Fotoframe
 ```
 
 Pruefen:
@@ -156,6 +165,12 @@ Info-Bilder:
 ```text
 info-images.json
 info/*.png
+```
+
+Quizfragen:
+
+```text
+quiz.json
 ```
 
 Der Mint synchronisiert alle zwei Minuten. Die Anzeige prueft den lokalen Stand
@@ -322,6 +337,29 @@ Fotoframe/info/<dateiname.png>
 
 und `info-images.json` aktualisieren.
 
+### Prompt: Quizfragen
+
+`quiz.json` enthaelt Fragen und Antworten. Angezeigt wird zuerst nur die Frage,
+nach einigen Sekunden die Antwort. Immer drei Fragen nacheinander.
+
+```text
+Erstelle oder aktualisiere diese quiz.json fuer den Linux Mint Photo Frame.
+
+Neue Fragen:
+<Fragen und Antworten einfuegen, z.B. aus Excel>
+
+Regeln:
+- Gib die komplette quiz.json zurueck.
+- Verwende schema_version 1.
+- Jeder Eintrag hat id, question und answer.
+- Keine Antwortoptionen anzeigen.
+- Fragen kurz und gut lesbar formulieren.
+- Keine Erklaerung, nur JSON.
+
+Hier ist die aktuelle quiz.json:
+<JSON EINFUEGEN>
+```
+
 ### Prompt: Aufraeumen
 
 ```text
@@ -468,6 +506,76 @@ Die Datei `arzttermin.png` liegt dann unter:
 info/arzttermin.png
 ```
 
+## Wartungsmodus
+
+Fuer AnyDesk-Administration ohne stoerenden Fullscreen:
+
+```bash
+maintenance 10
+```
+
+Das stoppt Firefox-Kiosk und Watchdog fuer 10 Minuten und startet danach
+automatisch wieder. Der Sync bleibt aktiv. Sofort zurueck zum Kiosk:
+
+```bash
+maintenance off
+```
+
+## Livecam Greifensee
+
+Die Livecam ist bewusst konservativ geloest: nur ein direktes JPG, kein schweres
+Webcam-Portal im Kiosk. Standard:
+
+```json
+{
+  "livecam_enabled": true,
+  "livecam_url": "https://www.greifenseewetter.ch/Kamera/greifensee2.jpg",
+  "livecam_every_minutes": 45,
+  "livecam_duration_seconds": 35,
+  "livecam_min_refresh_minutes": 15
+}
+```
+
+Damit wird nicht laufend ein neues Bild geladen. Wenn die Kamera stoert:
+`livecam_enabled` in `config.json` auf `false` setzen.
+
+## Quizfragen
+
+Datei im OneDrive-Ordner:
+
+```text
+Fotoframe/quiz.json
+```
+
+Format:
+
+```json
+{
+  "schema_version": 1,
+  "items": [
+    {
+      "id": "hauptstadt_frankreich",
+      "question": "Was ist die Hauptstadt von Frankreich?",
+      "answer": "Paris"
+    }
+  ]
+}
+```
+
+Standardverhalten aus `config.json`:
+
+```json
+{
+  "quiz_enabled": true,
+  "quiz_every_minutes": 10,
+  "quiz_block_size": 3,
+  "quiz_question_seconds": 12,
+  "quiz_answer_seconds": 8
+}
+```
+
+Es werden jeweils drei Fragen nacheinander gezeigt. Die Frage erscheint alleine,
+dann die Antwort. Danach laeuft wieder der Bilderrahmen weiter.
 ## Neustart aus der Ferne
 
 Remote-Neustart laeuft wie beim PAC, aber lokal ueber OneDrive:

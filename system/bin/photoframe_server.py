@@ -39,6 +39,16 @@ DEFAULT_CONFIG = {
     "interstitial_every_minutes": 10,
     "interstitial_duration_seconds": 40,
     "priority_rotation_seconds": 45,
+    "livecam_enabled": True,
+    "livecam_url": "https://www.greifenseewetter.ch/Kamera/greifensee2.jpg",
+    "livecam_every_minutes": 45,
+    "livecam_duration_seconds": 35,
+    "livecam_min_refresh_minutes": 15,
+    "quiz_enabled": True,
+    "quiz_every_minutes": 10,
+    "quiz_block_size": 3,
+    "quiz_question_seconds": 12,
+    "quiz_answer_seconds": 8,
     "background": "#050506",
 }
 
@@ -100,6 +110,7 @@ def content_payload() -> dict:
         "photos": list_photos(),
         "news": load_json_file(DATA_DIR / "news.json", {"schema_version": 1, "items": []}),
         "info_images": load_json_file(DATA_DIR / "info-images.json", {"schema_version": 1, "items": []}),
+        "quiz": load_json_file(DATA_DIR / "quiz.json", load_json_file(EXAMPLES_DIR / "quiz.json", {"schema_version": 1, "items": []})),
     }
 
 

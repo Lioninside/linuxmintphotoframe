@@ -5,5 +5,15 @@
   "interstitial_every_minutes": 10,
   "interstitial_duration_seconds": 40,
   "priority_rotation_seconds": 45,
+  "livecam_enabled": true,
+  "livecam_url": "https://www.greifenseewetter.ch/Kamera/greifensee2.jpg",
+  "livecam_every_minutes": 45,
+  "livecam_duration_seconds": 35,
+  "livecam_min_refresh_minutes": 15,
+  "quiz_enabled": true,
+  "quiz_every_minutes": 10,
+  "quiz_block_size": 3,
+  "quiz_question_seconds": 12,
+  "quiz_answer_seconds": 8,
   "background": "#050506"
 }

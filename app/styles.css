@@ -113,11 +113,32 @@ body {
   text-align: center;
   text-wrap: balance;
   overflow-wrap: anywhere;
+  white-space: pre-line;
   text-shadow: 0 4px 22px rgba(0, 0, 0, 0.62);
 }
 
 .message-image:not(.hidden) + .message-text {
   font-size: clamp(30px, 4.2vh, 58px);
+}
+
+.message-layer.quiz_question .message-text,
+.message-layer.quiz_answer .message-text {
+  max-width: 1180px;
+  font-size: clamp(48px, 7vh, 94px);
+  line-height: 1.1;
+}
+
+.message-layer.quiz_answer .message-text {
+  color: #fff2b8;
+}
+
+.message-layer.livecam .message-card {
+  width: min(1320px, 96vw);
+}
+
+.message-layer.livecam .message-image {
+  max-width: min(100%, 1280px);
+  max-height: 76vh;
 }
 
 .empty-layer {

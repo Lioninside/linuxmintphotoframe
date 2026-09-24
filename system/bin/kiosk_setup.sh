@@ -102,7 +102,7 @@ seed_data_files() {
     FRAME_DATA_DIR="${FRAME_DATA_DIR:-${HOME}/frame-data}"
     mkdir -p "${FRAME_DATA_DIR}/photos" "${FRAME_DATA_DIR}/info" "${FRAME_DATA_DIR}/command"
 
-    for name in config.json news.json info-images.json; do
+    for name in config.json news.json info-images.json quiz.json; do
         if [[ ! -f "${FRAME_DATA_DIR}/${name}" && -f "${INSTALL_DIR}/examples/${name}" ]]; then
             cp "${INSTALL_DIR}/examples/${name}" "${FRAME_DATA_DIR}/${name}"
             ok "Seeded ${FRAME_DATA_DIR}/${name}"
@@ -124,6 +124,13 @@ install_systemd_units() {
     systemctl --user enable --now linuxmintphotoframe-browser.service
     systemctl --user enable --now linuxmintphotoframe-watchdog.service
     ok "Enabled and started user services"
+}
+
+install_user_commands() {
+    mkdir -p "${HOME}/.local/bin" "${HOME}/bin"
+    ln -sf "${INSTALL_DIR}/system/bin/maintenance.sh" "${HOME}/.local/bin/maintenance"
+    ln -sf "${INSTALL_DIR}/system/bin/maintenance.sh" "${HOME}/bin/maintenance"
+    ok "Installed maintenance command"
 }
 
 install_desktop_shortcut() {
@@ -148,6 +155,7 @@ main() {
     install_files
     write_env_if_missing
     seed_data_files
+    install_user_commands
     install_firefox_profile
     install_systemd_units
     install_desktop_shortcut

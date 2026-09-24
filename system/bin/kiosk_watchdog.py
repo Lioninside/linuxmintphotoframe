@@ -25,7 +25,6 @@ LOOP_INTERVAL = 30
 REBOOT_FILE = FRAME_DATA_DIR / "command" / "neustart.txt"
 REBOOT_STAMP_FILE = kiosk_common.STATE_DIR / "neustart_zuletzt.txt"
 REBOOT_MAX_LEN = 200
-LAUNCHER = HOME / "linuxmintphotoframe" / "system" / "bin" / "start_photoframe_kiosk.sh"
 
 
 def _run(cmd: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
@@ -65,11 +64,7 @@ def _check_browser() -> None:
     if win:
         _focus_fullscreen()
         return
-    if LAUNCHER.exists():
-        LOG.warning("INTERVENTION: Firefox window missing, launching kiosk")
-        subprocess.Popen([str(LAUNCHER)], env=kiosk_common.x11_env())
-    else:
-        LOG.error("Launcher missing: %s", LAUNCHER)
+    kiosk_common.service_restart("linuxmintphotoframe-browser.service", LOG)
 
 
 def _check_dpms() -> None:

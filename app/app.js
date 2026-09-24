@@ -7,6 +7,16 @@
     interstitial_every_minutes: 10,
     interstitial_duration_seconds: 40,
     priority_rotation_seconds: 45,
+    livecam_enabled: true,
+    livecam_url: "https://www.greifenseewetter.ch/Kamera/greifensee2.jpg",
+    livecam_every_minutes: 45,
+    livecam_duration_seconds: 35,
+    livecam_min_refresh_minutes: 15,
+    quiz_enabled: true,
+    quiz_every_minutes: 10,
+    quiz_block_size: 3,
+    quiz_question_seconds: 12,
+    quiz_answer_seconds: 8,
     background: "#050506"
   };
 
@@ -25,11 +35,18 @@
     photos: [],
     news: [],
     infoImages: [],
+    quiz: [],
     photoIndex: -1,
     lastPhotoUrl: "",
     lastMessageId: "",
     lastVariantKey: "",
     nextNormalMessageAt: 0,
+    nextQuizAt: 0,
+    nextLivecamAt: 0,
+    livecamUrl: "",
+    livecamUrlRefreshedAt: 0,
+    quizSession: null,
+    quizSeenIds: [],
     messageShownAt: {},
     messageVisibleUntil: 0,
     mode: "photo"
@@ -38,6 +55,10 @@
   function seconds(value, fallback) {
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? n * 1000 : fallback * 1000;
+  }
+
+  function minutes(value, fallback) {
+    return seconds(Number(value) * 60, fallback * 60);
   }
 
   function cacheBusted(path) {
@@ -111,6 +132,10 @@
       .flatMap((value) => Array.isArray(value) ? value : [value])
       .map((value) => typeof value === "string" ? value.trim() : "")
       .filter(Boolean);
+  }
+
+  function firstString(...values) {
+    return stringList(...values)[0] || "";
   }
 
   function eventTiming(item, now) {
@@ -192,6 +217,18 @@
     };
   }
 
+  function normalizeQuizItem(item, index) {
+    if (!item || typeof item !== "object") return null;
+    const question = firstString(item.question, item.frage, item.Frage, item.text);
+    const answer = firstString(item.answer, item.antwort, item.Antwort, item.solution, item.loesung);
+    if (!question || !answer) return null;
+    return {
+      id: `quiz:${item.id || index + 1}`,
+      question,
+      answer
+    };
+  }
+
   function activeMessages(priorityOnly) {
     const now = new Date();
     const textItems = (state.news || [])
@@ -263,8 +300,19 @@
     return picked.text;
   }
 
+  function overlayModes() {
+    return ["priority", "interstitial", "livecam", "quiz_question", "quiz_answer"];
+  }
+
+  function setOverlayMode(mode) {
+    for (const name of overlayModes()) {
+      els.messageLayer.classList.toggle(name, name === mode);
+    }
+  }
+
   function hideMessage() {
     els.messageLayer.classList.add("hidden");
+    setOverlayMode("");
     els.messageImage.classList.add("hidden");
     els.messageImage.removeAttribute("src");
     els.messageText.textContent = "";
@@ -275,7 +323,8 @@
   function showMessage(item, fallbackDurationMs) {
     if (!item) return;
     state.lastMessageId = item.id;
-    state.mode = item.priority ? "priority" : "interstitial";
+    state.mode = item.mode || (item.priority ? "priority" : "interstitial");
+    setOverlayMode(state.mode);
 
     if (item.image) {
       els.messageImage.src = item.image;
@@ -285,7 +334,7 @@
       els.messageImage.removeAttribute("src");
     }
 
-    els.messageText.textContent = pickVariant(item);
+    els.messageText.textContent = item.text || pickVariant(item);
     els.messageLayer.classList.remove("hidden");
     state.messageVisibleUntil = Date.now() + seconds(item.duration_sec, fallbackDurationMs / 1000);
   }
@@ -327,12 +376,134 @@
     img.src = url;
   }
 
+  function shuffled(items) {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }
+
+  function pickQuizBlock() {
+    if (!state.quiz.length) return [];
+    const wanted = Math.max(1, Math.min(Number(state.config.quiz_block_size) || DEFAULT_CONFIG.quiz_block_size, state.quiz.length));
+    const unseen = state.quiz.filter((item) => !state.quizSeenIds.includes(item.id));
+    const pool = unseen.length >= wanted ? unseen : state.quiz;
+    const block = shuffled(pool).slice(0, wanted);
+    state.quizSeenIds = [...state.quizSeenIds, ...block.map((item) => item.id)].slice(-Math.max(50, state.quiz.length));
+    return block;
+  }
+
+  function showQuizQuestion() {
+    const session = state.quizSession;
+    if (!session) return;
+    const item = session.items[session.index];
+    if (!item) return;
+    session.phase = "question";
+    showMessage({
+      id: `${item.id}:question`,
+      mode: "quiz_question",
+      type: "text",
+      variants: [`Quizfrage ${session.index + 1} von ${session.items.length}\n\n${item.question}`],
+      duration_sec: state.config.quiz_question_seconds
+    }, seconds(state.config.quiz_question_seconds, DEFAULT_CONFIG.quiz_question_seconds));
+  }
+
+  function showQuizAnswer() {
+    const session = state.quizSession;
+    if (!session) return;
+    const item = session.items[session.index];
+    if (!item) return;
+    session.phase = "answer";
+    showMessage({
+      id: `${item.id}:answer`,
+      mode: "quiz_answer",
+      type: "text",
+      variants: [`Antwort:\n\n${item.answer}`],
+      duration_sec: state.config.quiz_answer_seconds
+    }, seconds(state.config.quiz_answer_seconds, DEFAULT_CONFIG.quiz_answer_seconds));
+  }
+
+  function finishQuiz(now) {
+    state.quizSession = null;
+    state.nextQuizAt = now + minutes(state.config.quiz_every_minutes, DEFAULT_CONFIG.quiz_every_minutes);
+    hideMessage();
+  }
+
+  function startQuizBlock(now) {
+    const items = pickQuizBlock();
+    if (!items.length) {
+      state.nextQuizAt = now + minutes(state.config.quiz_every_minutes, DEFAULT_CONFIG.quiz_every_minutes);
+      return false;
+    }
+    state.quizSession = { items, index: 0, phase: "question" };
+    showQuizQuestion();
+    return true;
+  }
+
+  function tickQuiz(now) {
+    if (!state.quizSession) return false;
+    if (["quiz_question", "quiz_answer"].includes(state.mode) && now < state.messageVisibleUntil) return true;
+
+    if (state.quizSession.phase === "question") {
+      showQuizAnswer();
+      return true;
+    }
+
+    state.quizSession.index += 1;
+    if (state.quizSession.index < state.quizSession.items.length) {
+      showQuizQuestion();
+      return true;
+    }
+
+    finishQuiz(now);
+    return false;
+  }
+
+  function maybeStartQuiz(now) {
+    if (state.config.quiz_enabled === false) return false;
+    if (!state.quiz.length || now < state.nextQuizAt) return false;
+    return startQuizBlock(now);
+  }
+
+  function livecamImageUrl(now) {
+    const base = String(state.config.livecam_url || "").trim();
+    if (!base) return "";
+    const minRefreshMs = minutes(state.config.livecam_min_refresh_minutes, DEFAULT_CONFIG.livecam_min_refresh_minutes);
+    if (!state.livecamUrl || !state.livecamUrl.startsWith(base) || now - state.livecamUrlRefreshedAt >= minRefreshMs) {
+      state.livecamUrl = cacheBusted(base);
+      state.livecamUrlRefreshedAt = now;
+    }
+    return state.livecamUrl;
+  }
+
+  function maybeShowLivecam(now) {
+    if (state.config.livecam_enabled === false) return false;
+    if (now < state.nextLivecamAt) return false;
+    const image = livecamImageUrl(now);
+    if (!image) return false;
+
+    showMessage({
+      id: "livecam:greifensee",
+      mode: "livecam",
+      type: "image",
+      image,
+      variants: ["Livecam Greifensee"],
+      duration_sec: state.config.livecam_duration_seconds
+    }, seconds(state.config.livecam_duration_seconds, DEFAULT_CONFIG.livecam_duration_seconds));
+
+    state.nextLivecamAt = now + minutes(state.config.livecam_every_minutes, DEFAULT_CONFIG.livecam_every_minutes);
+    return true;
+  }
+
   async function loadContent() {
     const data = await fetchJSON("/api/content", {});
     state.config = { ...DEFAULT_CONFIG, ...(data.config || {}) };
     state.photos = Array.isArray(data.photos) ? data.photos : [];
     state.news = Array.isArray(data.news?.items) ? data.news.items : [];
     state.infoImages = Array.isArray(data.info_images?.items) ? data.info_images.items : [];
+    state.quiz = Array.isArray(data.quiz?.items) ? data.quiz.items.map(normalizeQuizItem).filter(Boolean) : [];
     document.documentElement.style.setProperty("--bg", state.config.background || DEFAULT_CONFIG.background);
   }
 
@@ -349,26 +520,25 @@
 
     if (state.mode === "priority") hideMessage();
 
-    if (state.mode === "interstitial") {
+    if (tickQuiz(now)) return;
+
+    if (["interstitial", "livecam"].includes(state.mode)) {
       if (now >= state.messageVisibleUntil) hideMessage();
       return;
     }
 
+    if (maybeStartQuiz(now)) return;
+    if (maybeShowLivecam(now)) return;
+
     const normalMessages = activeMessages(false);
     if (normalMessages.length && now >= state.nextNormalMessageAt) {
       const dueMessages = normalMessages.filter((item) => {
-        const itemEveryMs = seconds(
-          Number(item.every_minutes || state.config.interstitial_every_minutes) * 60,
-          DEFAULT_CONFIG.interstitial_every_minutes * 60
-        );
+        const itemEveryMs = minutes(item.every_minutes || state.config.interstitial_every_minutes, DEFAULT_CONFIG.interstitial_every_minutes);
         const lastShown = state.messageShownAt[item.id] || 0;
         return !lastShown || now - lastShown >= itemEveryMs;
       });
       const item = chooseNormalMessage(dueMessages.length ? dueMessages : normalMessages);
-      const quietMs = seconds(
-        Number(item?.every_minutes || state.config.interstitial_every_minutes) * 60,
-        DEFAULT_CONFIG.interstitial_every_minutes * 60
-      );
+      const quietMs = minutes(item?.every_minutes || state.config.interstitial_every_minutes, DEFAULT_CONFIG.interstitial_every_minutes);
       state.nextNormalMessageAt = now + quietMs;
       if (item) state.messageShownAt[item.id] = now;
       showMessage(item, seconds(state.config.interstitial_duration_seconds, DEFAULT_CONFIG.interstitial_duration_seconds));
@@ -377,10 +547,10 @@
 
   async function start() {
     await loadContent();
-    state.nextNormalMessageAt = Date.now() + seconds(
-      state.config.interstitial_every_minutes * 60,
-      DEFAULT_CONFIG.interstitial_every_minutes * 60
-    );
+    const now = Date.now();
+    state.nextNormalMessageAt = now + minutes(state.config.interstitial_every_minutes, DEFAULT_CONFIG.interstitial_every_minutes);
+    state.nextQuizAt = now + minutes(state.config.quiz_every_minutes, DEFAULT_CONFIG.quiz_every_minutes);
+    state.nextLivecamAt = now + minutes(state.config.livecam_every_minutes, DEFAULT_CONFIG.livecam_every_minutes);
     showNextPhoto();
 
     window.setInterval(loadContent, seconds(state.config.content_reload_seconds, DEFAULT_CONFIG.content_reload_seconds));

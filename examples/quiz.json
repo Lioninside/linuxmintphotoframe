@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "items": [
+    {
+      "id": "hauptstadt_frankreich",
+      "question": "Was ist die Hauptstadt von Frankreich?",
+      "answer": "Paris"
+    },
+    {
+      "id": "spinne_beine",
+      "question": "Wie viele Beine hat eine Spinne?",
+      "answer": "Acht"
+    },
+    {
+      "id": "groesstes_landtier",
+      "question": "Welches Tier ist das groesste Landtier?",
+      "answer": "Elefant"
+    },
+    {
+      "id": "stadt_graubuenden",
+      "question": "Nenne die groesste Stadt in Graubuenden.",
+      "answer": "Chur"
+    },
+    {
+      "id": "tier_miaut",
+      "question": "Welches Tier miaut oft?",
+      "answer": "Katze"
+    },
+    {
+      "id": "schnee_farbe",
+      "question": "Welche Farbe hat Schnee meistens?",
+      "answer": "Weiss"
+    }
+  ]
+}

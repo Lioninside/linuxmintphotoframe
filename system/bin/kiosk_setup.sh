@@ -92,6 +92,12 @@ PHOTOFRAME_PORT=8765
 # Optional display reset. Leave empty until xrandr output/mode are known.
 DISPLAY_OUTPUT=
 DISPLAY_MODE=
+
+# Disk protection. Values are MB. Sync stops below DISK_MIN_SYNC_FREE_MB.
+DISK_WARN_FREE_MB=10240
+DISK_MIN_SYNC_FREE_MB=3072
+RCLONE_LOG_MAX_BYTES=2000000
+RCLONE_LOG_KEEP_LINES=2000
 ENV_EOF
     ok "Created ${ENV_FILE}"
 }

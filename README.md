@@ -576,6 +576,33 @@ Standardverhalten aus `config.json`:
 
 Es werden jeweils drei Fragen nacheinander gezeigt. Die Frage erscheint alleine,
 dann die Antwort. Danach laeuft wieder der Bilderrahmen weiter.
+
+## Speicherschutz
+
+Der Kiosk loescht keine Fotos automatisch. Stattdessen prueft der Sync vor jedem
+rclone-Lauf den freien Speicher auf dem Laufwerk von `FRAME_DATA_DIR`.
+
+Standardwerte:
+
+```bash
+DISK_WARN_FREE_MB=10240      # Warnung unter 10 GB frei
+DISK_MIN_SYNC_FREE_MB=3072   # Sync stoppt unter 3 GB frei
+RCLONE_LOG_MAX_BYTES=2000000 # rclone.log wird ab ca. 2 MB gekuerzt
+RCLONE_LOG_KEEP_LINES=2000   # letzte rclone-Logzeilen behalten
+```
+
+Wenn zu wenig Speicher frei ist, bleibt der bestehende lokale Datenbestand
+unveraendert. Neue OneDrive-Inhalte werden dann nicht mehr nachgeladen, bis
+wieder Platz frei ist.
+
+Pruefen:
+
+```bash
+df -h ~ ~/frame-data
+du -sh ~/frame-data ~/frame-data/photos ~/state
+bash ~/linuxmintphotoframe/system/bin/kiosk_healthcheck.sh
+```
+
 ## Neustart aus der Ferne
 
 Remote-Neustart laeuft wie beim PAC, aber lokal ueber OneDrive:

@@ -16,6 +16,8 @@ fi
 
 FRAME_DATA_DIR="${FRAME_DATA_DIR:-${HOME}/frame-data}"
 PHOTOFRAME_PORT="${PHOTOFRAME_PORT:-8765}"
+DISK_WARN_FREE_MB="${DISK_WARN_FREE_MB:-10240}"
+DISK_MIN_SYNC_FREE_MB="${DISK_MIN_SYNC_FREE_MB:-3072}"
 
 BOLD=$'\033[1m'
 GREEN=$'\033[0;32m'
@@ -27,6 +29,24 @@ ok() { printf '%s[OK]%s %s\n' "${GREEN}" "${RESET}" "$1"; }
 warn() { printf '%s[WARN]%s %s\n' "${YELLOW}" "${RESET}" "$1"; }
 fail() { printf '%s[FAIL]%s %s\n' "${RED}" "${RESET}" "$1"; }
 info() { printf '     %s\n' "$1"; }
+is_uint() { [[ "${1:-}" =~ ^[0-9]+$ ]]; }
+
+sanitize_number_settings() {
+    is_uint "${DISK_WARN_FREE_MB}" || DISK_WARN_FREE_MB=10240
+    is_uint "${DISK_MIN_SYNC_FREE_MB}" || DISK_MIN_SYNC_FREE_MB=3072
+}
+
+free_mb_for_path() {
+    df -Pm "$1" 2>/dev/null | awk 'NR == 2 {print $4}'
+}
+
+human_du() {
+    local path="$1"
+    [[ -e "${path}" ]] || return 0
+    du -sh "${path}" 2>/dev/null | awk '{print $1 " " $2}'
+}
+
+sanitize_number_settings
 
 printf "%sLinux Mint Photo Frame Health Check - %s%s\n" "${BOLD}" "$(date '+%Y-%m-%d %H:%M:%S')" "${RESET}"
 
@@ -35,6 +55,8 @@ info "ENV_FILE=${ENV_FILE}"
 info "FRAME_DATA_DIR=${FRAME_DATA_DIR}"
 info "PHOTOFRAME_PORT=${PHOTOFRAME_PORT}"
 info "RCLONE_SOURCE=${RCLONE_SOURCE:-}"
+info "DISK_WARN_FREE_MB=${DISK_WARN_FREE_MB}"
+info "DISK_MIN_SYNC_FREE_MB=${DISK_MIN_SYNC_FREE_MB}"
 
 printf "\n%sServices%s\n" "${BOLD}" "${RESET}"
 for svc in \
@@ -66,13 +88,36 @@ else
     warn "No photos found yet in ${FRAME_DATA_DIR}/photos"
 fi
 
-for f in config.json news.json info-images.json; do
+for f in config.json news.json info-images.json quiz.json; do
     if [[ -f "${FRAME_DATA_DIR}/${f}" ]]; then
         ok "${f} present"
     else
         warn "${f} missing"
     fi
 done
+
+printf "\n%sStorage%s\n" "${BOLD}" "${RESET}"
+if [[ -d "${FRAME_DATA_DIR}" ]]; then
+    df -h "${FRAME_DATA_DIR}" | sed 's/^/     /'
+    free_mb="$(free_mb_for_path "${FRAME_DATA_DIR}")"
+    if is_uint "${free_mb}"; then
+        if (( free_mb < DISK_MIN_SYNC_FREE_MB )); then
+            fail "Only ${free_mb} MB free; sync minimum is ${DISK_MIN_SYNC_FREE_MB} MB"
+        elif (( free_mb < DISK_WARN_FREE_MB )); then
+            warn "Only ${free_mb} MB free; warning threshold is ${DISK_WARN_FREE_MB} MB"
+        else
+            ok "Free disk space: ${free_mb} MB"
+        fi
+    else
+        warn "Could not determine free disk space"
+    fi
+    for path in "${FRAME_DATA_DIR}" "${FRAME_DATA_DIR}/photos" "${STATE_DIR}"; do
+        size="$(human_du "${path}")"
+        [[ -n "${size}" ]] && info "${size}"
+    done
+else
+    warn "Storage check skipped, data directory missing"
+fi
 
 printf "\n%sLocal server%s\n" "${BOLD}" "${RESET}"
 if python3 - <<PY

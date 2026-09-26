@@ -506,6 +506,38 @@ Die Datei `arzttermin.png` liegt dann unter:
 info/arzttermin.png
 ```
 
+## Anzeige-Tuning
+
+Die wichtigsten Takt- und Lesbarkeitswerte liegen in OneDrive:
+
+```text
+Fotoframe/config.json
+```
+
+Empfohlene Werte fuer den Sony-TV und Sehbehinderung:
+
+```json
+{
+  "photo_seconds": 45,
+  "interstitial_every_minutes": 5,
+  "interstitial_duration_seconds": 40,
+  "quiz_every_minutes": 10,
+  "quiz_block_size": 3,
+  "quiz_question_seconds": 12,
+  "quiz_answer_seconds": 8
+}
+```
+
+Hinweise:
+
+- `photo_seconds`: hoeher = ruhigere Slideshow.
+- `interstitial_every_minutes`: niedriger = News/Suggestions erscheinen haeufiger.
+- Quiz wird vollflaechig dunkelblau mit sehr grosser weisser Schrift angezeigt.
+- News/Suggestions bekommen eine sehr ruhige Bewegung, damit das Bild lebendiger wirkt.
+
+Bei bestehenden Installationen die vorhandene `config.json` in OneDrive anpassen.
+Das Setup ersetzt sie nicht automatisch, damit lokale Einstellungen erhalten bleiben.
+
 ## Wartungsmodus
 
 Fuer AnyDesk-Administration ohne stoerenden Fullscreen:

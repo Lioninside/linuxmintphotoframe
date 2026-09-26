@@ -4,6 +4,7 @@
   --text: #fff9ef;
   --muted: #d5d0c7;
   --panel: rgba(13, 14, 16, 0.78);
+  --quiz-bg: #061a3a;
 }
 
 * {
@@ -70,10 +71,15 @@ body {
   place-items: center;
   padding: min(7vh, 72px) min(6vw, 88px);
   background:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.48)),
-    rgba(0, 0, 0, 0.68);
+    linear-gradient(90deg, rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0.54)),
+    rgba(0, 0, 0, 0.72);
   opacity: 1;
   transition: opacity 400ms ease;
+}
+
+.message-layer.quiz_question,
+.message-layer.quiz_answer {
+  background: var(--quiz-bg);
 }
 
 .message-layer.hidden,
@@ -88,6 +94,11 @@ body {
   justify-items: center;
   width: min(1120px, 94vw);
   max-height: 92vh;
+}
+
+.message-layer.interstitial .message-card,
+.message-layer.priority .message-card {
+  animation: messageFloat 18s ease-in-out infinite alternate;
 }
 
 .message-image {
@@ -107,29 +118,42 @@ body {
   width: 100%;
   max-width: 1040px;
   color: var(--text);
-  font-size: clamp(42px, 6.2vh, 82px);
+  font-size: clamp(44px, 6.6vh, 88px);
   line-height: 1.12;
-  font-weight: 750;
+  font-weight: 780;
   text-align: center;
   text-wrap: balance;
   overflow-wrap: anywhere;
   white-space: pre-line;
-  text-shadow: 0 4px 22px rgba(0, 0, 0, 0.62);
+  text-shadow: 0 5px 24px rgba(0, 0, 0, 0.72);
+}
+
+.message-layer.interstitial .message-text,
+.message-layer.priority .message-text {
+  animation: textGlow 6s ease-in-out infinite alternate;
 }
 
 .message-image:not(.hidden) + .message-text {
-  font-size: clamp(30px, 4.2vh, 58px);
+  font-size: clamp(32px, 4.6vh, 62px);
+}
+
+.message-layer.quiz_question .message-card,
+.message-layer.quiz_answer .message-card {
+  width: min(1480px, 94vw);
 }
 
 .message-layer.quiz_question .message-text,
 .message-layer.quiz_answer .message-text {
-  max-width: 1180px;
-  font-size: clamp(48px, 7vh, 94px);
-  line-height: 1.1;
+  max-width: 1420px;
+  color: #ffffff;
+  font-size: clamp(78px, 10.8vh, 150px);
+  line-height: 1.04;
+  font-weight: 850;
+  text-shadow: none;
 }
 
 .message-layer.quiz_answer .message-text {
-  color: #fff2b8;
+  font-size: clamp(88px, 12vh, 164px);
 }
 
 .message-layer.livecam .message-card {
@@ -158,4 +182,26 @@ body {
   margin: 0;
   color: var(--muted);
   font-size: clamp(22px, 3.2vh, 36px);
+}
+
+@keyframes messageFloat {
+  from {
+    transform: translateY(1.2vh) scale(0.995);
+  }
+
+  to {
+    transform: translateY(-1.2vh) scale(1.005);
+  }
+}
+
+@keyframes textGlow {
+  from {
+    text-shadow: 0 5px 24px rgba(0, 0, 0, 0.72);
+  }
+
+  to {
+    text-shadow:
+      0 5px 24px rgba(0, 0, 0, 0.72),
+      0 0 22px rgba(255, 249, 239, 0.22);
+  }
 }

@@ -2,9 +2,9 @@
   "use strict";
 
   const DEFAULT_CONFIG = {
-    photo_seconds: 20,
+    photo_seconds: 45,
     content_reload_seconds: 60,
-    interstitial_every_minutes: 10,
+    interstitial_every_minutes: 5,
     interstitial_duration_seconds: 40,
     priority_rotation_seconds: 45,
     livecam_enabled: true,

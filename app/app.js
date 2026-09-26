@@ -320,6 +320,25 @@
     state.mode = "photo";
   }
 
+  function fitMessageText() {
+    els.messageText.style.fontSize = "";
+    const card = els.messageText.closest(".message-card");
+    if (!card) return;
+
+    const isQuiz = ["quiz_question", "quiz_answer"].includes(state.mode);
+    const minFont = isQuiz ? Math.max(58, window.innerHeight * 0.06) : Math.max(48, window.innerHeight * 0.05);
+    let fontSize = Number.parseFloat(window.getComputedStyle(els.messageText).fontSize) || 96;
+    const maxHeight = els.messageLayer.clientHeight * 0.9;
+    const maxWidth = els.messageLayer.clientWidth * 0.96;
+
+    for (let i = 0; i < 24; i += 1) {
+      const tooTall = card.scrollHeight > maxHeight || els.messageText.scrollHeight > maxHeight;
+      const tooWide = card.scrollWidth > maxWidth || els.messageText.scrollWidth > maxWidth;
+      if ((!tooTall && !tooWide) || fontSize <= minFont) break;
+      fontSize -= 4;
+      els.messageText.style.fontSize = `${fontSize}px`;
+    }
+  }
   function showMessage(item, fallbackDurationMs) {
     if (!item) return;
     state.lastMessageId = item.id;
@@ -334,8 +353,10 @@
       els.messageImage.removeAttribute("src");
     }
 
+    els.messageText.style.fontSize = "";
     els.messageText.textContent = item.text || pickVariant(item);
     els.messageLayer.classList.remove("hidden");
+    window.requestAnimationFrame(fitMessageText);
     state.messageVisibleUntil = Date.now() + seconds(item.duration_sec, fallbackDurationMs / 1000);
   }
 

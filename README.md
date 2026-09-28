@@ -177,9 +177,36 @@ if ! rclone lsf thusis:KioskContent/common | grep -qx 'news.json'; then
 fi
 ```
 
+Nach erfolgreicher Migration kann die alte lokale Root-Struktur auf Mint
+aufgeraeumt werden. Erst ausfuehren, wenn `kiosk_healthcheck.sh` fuer
+`common/*` und `mint2/*` gruen ist:
+
+```bash
+legacy="$HOME/state/legacy-frame-data-$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$legacy"
+
+for path in config.json news.json info-images.json quiz.json photos info command; do
+  if [ -e "$HOME/frame-data/$path" ]; then
+    mv "$HOME/frame-data/$path" "$legacy/"
+  fi
+done
+
+bash ~/linuxmintphotoframe/system/bin/onedrive_sync.sh
+bash ~/linuxmintphotoframe/system/bin/kiosk_healthcheck.sh
+```
+
+Das betrifft nur lokale Altdateien. Inhalte im Thusis-OneDrive bleiben dabei
+unangetastet.
+
 ## Inhalte aktualisieren
 
 Alles passiert im Thusis-OneDrive-Ordner `KioskContent`.
+Normale Mini-Updates werden **nicht** auf dem Mint-PC gepflegt. Der Mint ist
+Laufzeitgeraet und spiegelt nur. Inhalte werden ueber **OneDrive Web** auf einem
+anderen PC bearbeitet und vom Kiosk danach automatisch abgeholt.
+
+Mint-Terminal/AnyDesk wird nur fuer Setup, Migration, Diagnose, Healthcheck,
+Sync-Test oder Neustart verwendet.
 
 Fotos:
 
@@ -211,25 +238,31 @@ mint2/quiz.json
 Der Mint synchronisiert alle zwei Minuten. Die Anzeige prueft den lokalen Stand
 regelmaessig und braucht normalerweise keinen Neustart.
 
-Manueller Sync-Test:
+Manueller Sync-Test auf Mint, nur zur Kontrolle nach einer Aenderung:
 
 ```bash
 bash ~/linuxmintphotoframe/system/bin/onedrive_sync.sh
 tail -50 ~/state/rclone.log
 ls -la ~/frame-data
-ls -la ~/frame-data/photos
+ls -la ~/frame-data/mint2/photos
 ```
 
-## Inhalte per Prompt erstellen
+## Content via OneDrive Web und Agent
 
 Die einfachste Pflege laeuft so:
 
 1. Bestehende `common/news.json`, `common/suggestions.json`,
    `common/recurring.json` oder `mint2/info-images.json` aus dem
-   Thusis-OneDrive oeffnen.
+   Thusis-OneDrive in **OneDrive Web** oeffnen.
 2. Inhalt in ChatGPT/Codex einfuegen.
 3. Einen der Prompts unten verwenden.
-4. Die komplette neue JSON-Datei zurueck in OneDrive speichern.
+4. Der Agent gibt die **komplette neue JSON-Datei** zurueck.
+5. Diese komplette Datei in OneDrive Web ersetzen und speichern.
+
+Der Agent hat keinen direkten Zugriff auf den Thusis-OneDrive. Er darf fuer
+Content-Miniupdates nicht den lokalen STC-OneDrive, Lioninside-OneDrive oder
+einen Windows-Ordner verwenden. Wenn die aktuelle Datei nicht im Prompt
+mitgeliefert wurde, muss der Agent nach der kompletten Datei fragen.
 
 Wichtig:
 
@@ -243,6 +276,43 @@ Wichtig:
 - Jede normale Textmeldung sollte mindestens zwei Varianten haben.
 - Tagesbezogene Meldungen bekommen `importance: "news"` und wenn moeglich `event_date`.
 - Allgemeiner Hintergrund-Content bekommt `importance: "filler"`.
+
+### Agenten-Regeln bei News/Suggestions
+
+Wenn der Nutzer eine neue Meldung promptet, muss der Agent zuerst die richtige
+Datei bestimmen:
+
+| Wunsch | Datei |
+|---|---|
+| Einmaliger Termin, Besuch, Ereignis, Erinnerung mit Datum | `common/news.json` |
+| Bevorstehende oder heutige wichtige Meldung | `common/news.json` |
+| Allgemeiner Hintergrund-Content ohne konkreten Termin | `common/suggestions.json` |
+| Passive Idee, Frage, kleine Beschaeftigung ohne Button | `common/suggestions.json` |
+| Wiederkehrende Routine, z.B. jeden Freitag Reinigung oder jaehrlich 1. August | `common/recurring.json` |
+| Suggestion mit Button, Link oder Aktion | Nicht Mint2; fuer PAC/Mint1 klaeren |
+| Mint2-spezifisches Info-Bild | `mint2/info-images.json` plus Bild in `mint2/info/` |
+| Quizfrage | `mint2/quiz.json` |
+| Foto | `mint2/photos/` |
+| Kiosk-Taktung, Quiz-/Livecam-Intervalle | `mint2/config.json` |
+
+Der Agent muss im Zweifel fragen, bevor er JSON erstellt. Typische Rueckfragen:
+
+- Soll die Meldung auf beiden Screens erscheinen oder nur auf Mint2?
+- Ist es ein einmaliger Termin, wiederkehrend oder nur ein Fuelltext?
+- Welches Start- und Enddatum gilt?
+- Gibt es eine Uhrzeit oder ein Zeitfenster?
+- Soll die Meldung dominant/priority sein?
+- Soll der Text heute anders lauten als vorher?
+
+Der Agent darf nicht raten, wenn diese Entscheidung die Datei oder die
+Gueltigkeit veraendert. Wenn die Datei klar ist, soll er die bestehende
+komplette JSON-Datei validieren, den Eintrag einfuegen, bestehende gueltige
+Eintraege behalten und die komplette neue JSON-Datei zurueckgeben.
+
+Reine Textmeldungen in `common/` erscheinen auf Mint1 und Mint2. Wenn der Nutzer
+eine reine Textmeldung **nur fuer Mint2** will, muss der Agent nachfragen. Mint2
+hat dafuer aktuell keine eigene Textdatei; moegliche Wege sind ein Info-Bild in
+`mint2/info-images.json` oder eine bewusste Code-/Strukturerweiterung.
 
 ### Prompt: Textmeldung
 
@@ -694,7 +764,7 @@ Pruefen:
 
 ```bash
 df -h ~ ~/frame-data
-du -sh ~/frame-data ~/frame-data/photos ~/state
+du -sh ~/frame-data ~/frame-data/common ~/frame-data/mint2/photos ~/state
 bash ~/linuxmintphotoframe/system/bin/kiosk_healthcheck.sh
 ```
 

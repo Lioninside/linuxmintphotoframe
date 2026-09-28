@@ -313,7 +313,13 @@ Selbsttest der Zwei-Quellen-Logik, ohne Netz und ohne echte Remotes:
 
 ```bash
 bash ~/linuxmintphotoframe/system/bin/test_sync.sh
+python3 ~/linuxmintphotoframe/system/bin/test_fernbefehle.py
 ```
+
+Der erste prueft die Zwei-Quellen-Logik gegen ein gefaelschtes rclone, der
+zweite die beiden Fernbefehle gegen lokale Befehlsdateien. Beide brauchen
+weder Netz noch echte Remotes und fassen nichts ausserhalb eines temporaeren
+Verzeichnisses an.
 
 ## Content via Agent
 

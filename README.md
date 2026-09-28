@@ -249,6 +249,8 @@ ls -la ~/frame-data/mint2/photos
 
 ## Content via OneDrive Web und Agent
 
+Kurzes Briefing fuer andere Agenten: `CONTENT_AGENT_BRIEF.md`.
+
 Die einfachste Pflege laeuft so:
 
 1. Bestehende `common/news.json`, `common/suggestions.json`,
@@ -273,9 +275,13 @@ Wichtig:
 - IDs klein und eindeutig schreiben, z.B. `pommes_freitag_2026_09_25`.
 - Keine sehr privaten Inhalte verwenden, wenn jemand anders Zugriff auf den
   OneDrive-Ordner hat.
-- Jede normale Textmeldung sollte mindestens zwei Varianten haben.
-- Tagesbezogene Meldungen bekommen `importance: "news"` und wenn moeglich `event_date`.
-- Allgemeiner Hintergrund-Content bekommt `importance: "filler"`.
+- Gemeinsame Dateien in `common/` muessen mit Mint1/PAC kompatibel bleiben.
+- Neue gemeinsame Textmeldungen verwenden `bubble`, `button_label`, `action`
+  und optional `neutral_only`.
+- Keine Mint2-only Felder wie `variants`, `variants_today`,
+  `variants_before`, `importance` oder `event_date` in `common/` einfuehren.
+- Fuer Varietaet mehrere Eintraege mit unterschiedlichen `id` und `bubble`
+  erstellen.
 
 ### Agenten-Regeln bei News/Suggestions
 
@@ -301,8 +307,8 @@ Der Agent muss im Zweifel fragen, bevor er JSON erstellt. Typische Rueckfragen:
 - Ist es ein einmaliger Termin, wiederkehrend oder nur ein Fuelltext?
 - Welches Start- und Enddatum gilt?
 - Gibt es eine Uhrzeit oder ein Zeitfenster?
-- Soll die Meldung dominant/priority sein?
 - Soll der Text heute anders lauten als vorher?
+- Soll es einen Button, Link oder eine Aktion geben?
 
 Der Agent darf nicht raten, wenn diese Entscheidung die Datei oder die
 Gueltigkeit veraendert. Wenn die Datei klar ist, soll er die bestehende
@@ -317,60 +323,51 @@ hat dafuer aktuell keine eigene Textdatei; moegliche Wege sind ein Info-Bild in
 ### Prompt: Textmeldung
 
 ```text
-Aktualisiere diese common/news.json fuer den Linux Mint Photo Frame.
+Aktualisiere diese JSON-Datei fuer den Thusis KioskContent.
 
 Ziel:
 - Neue Meldung: <was soll angezeigt werden>
-- Art: <news oder filler>
-- Falls news mit konkretem Tag: event_date <YYYY-MM-DD>
+- Datei: <common/news.json oder common/suggestions.json oder common/recurring.json>
 - Gueltig von: <Datum/Uhrzeit>
 - Gueltig bis: <Datum/Uhrzeit>
-- Prioritaet: <ja/nein>
-- Anzeigedauer: <X> Sekunden
+- Wiederholung: <keine/daily/weekly/annual>
+- Falls weekly: <wochentag>
+- Falls annual: <monat und tag>
+- Falls Tageswechsel noetig: <vorher-text und heute-text separat>
 
 Regeln:
-- Gib die komplette common/news.json zurueck.
-- Verwende schema_version 2.
+- Gib die komplette JSON-Datei zurueck.
 - Behalte bestehende Eintraege, ausser ich sage explizit loeschen.
-- Jede neue Meldung braucht mindestens 2 Varianten.
-- Bei event_date nutze variants_before und variants_today.
-- Formuliere variants_today mit "Heute ...".
-- Filler nutzt variants.
+- Die Datei ist shared fuer Mint1 und Mint2.
+- Verwende das PAC-kompatible Format mit bubble/button_label/action.
+- Keine variants/variants_today/variants_before verwenden.
+- Fuer Varietaet mehrere Eintraege mit verschiedenen ids und bubble-Texten erstellen.
 - Nutze klare, kurze, grosse-Bildschirm-taugliche Sprache.
 - Keine Erklaerung, nur JSON.
 
-Hier ist die aktuelle common/news.json:
+Hier ist die aktuelle Datei:
 <JSON EINFUEGEN>
 ```
 
-### Prompt: Viele Varianten zum gleichen Thema
+### Prompt: Mehrere Texte zum gleichen Thema
 
 Gut fuer Erinnerungen, die haeufig erscheinen sollen, aber nicht immer gleich
 klingen.
 
 ```text
-Erstelle mehrere unterschiedliche Varianten fuer einen common/news.json-Eintrag.
+Erstelle mehrere unterschiedliche Eintraege fuer diese gemeinsame KioskContent-Datei.
 
 Thema:
 <Thema>
 
-Art:
-<news oder filler>
-
-Falls news mit konkretem Tag:
-- event_date: <YYYY-MM-DD>
-- variants_before: mindestens 2 Varianten fuer vorher
-- variants_today: mindestens 2 Varianten fuer den Tag selbst, mit "Heute ..."
-
-Falls filler:
-- variants: mindestens 2 Varianten
+Datei:
+<common/news.json oder common/suggestions.json oder common/recurring.json>
 
 Zeitraum:
 von <Datum/Uhrzeit> bis <Datum/Uhrzeit>
 
-Anzeige:
-- priority: <true/false>
-- duration_sec: <X>
+Anzahl:
+<mindestens X Eintraege>
 
 Ton:
 - freundlich
@@ -379,13 +376,17 @@ Ton:
 - keine langen Saetze
 - keine Emojis
 
-Regeln:
+Kompatibilitaet:
+- Mint1 und Mint2 lesen diese Datei.
+- Verwende bubble/button_label/action.
+- Keine variants-Felder.
+
+Rueckgabe:
 - Jede Meldung braucht eine eindeutige id.
-- Gib die komplette common/news.json zurueck.
-- Verwende schema_version 2.
+- Gib die komplette JSON-Datei zurueck.
 - Keine Erklaerung, nur JSON.
 
-Hier ist die aktuelle common/news.json:
+Hier ist die aktuelle Datei:
 <JSON EINFUEGEN>
 ```
 
@@ -485,61 +486,43 @@ Hier ist die aktuelle common/news.json:
 
 ### News-Schema
 
-`common/news.json` unterstuetzt zwei Arten von Textinhalt:
-
-```text
-importance: "news"    aktuelle oder bevorstehende Meldung
-importance: "filler"  Hintergrund-Content, wenn wenig Aktuelles da ist
-```
-
-Fuer Termine mit einem konkreten Tag `event_date` verwenden. Dann kann derselbe
-Eintrag vor dem Ereignis anders klingen als am Ereignistag:
+`common/news.json` ist fuer einmalige oder zeitlich begrenzte Meldungen. Diese
+Datei wird von Mint1 und Mint2 gelesen. Neue Eintraege muessen deshalb das
+gemeinsame PAC-kompatible Format verwenden:
 
 ```json
 {
-  "id": "reinigung_freitag_2026_09_25",
-  "importance": "news",
-  "event_date": "2026-09-25",
-  "valid_from": "2026-09-23",
-  "valid_until": "2026-09-25",
-  "variants_before": [
-    "Am Freitag kommt die Reinigung.",
-    "Diese Woche kommt am Freitag wieder die Reinigung."
-  ],
-  "variants_today": [
-    "Heute kommt die Reinigung.",
-    "Heute ist Freitag, und die Reinigung kommt."
-  ],
-  "priority": false,
-  "duration_sec": 35
+  "id": "judith_besuch_vorschau_2026_10_02",
+  "valid_from": "2026-09-30",
+  "valid_until": "2026-10-01",
+  "bubble": "Am Freitag kommt Judith zu Besuch. Vielleicht geht ihr zusammen spazieren.",
+  "button_label": null,
+  "action": { "type": "none" },
+  "neutral_only": true
 }
 ```
 
-Hintergrund-Content hat kein `event_date`, sondern normale Varianten:
+Wenn eine Meldung am Ereignistag anders lauten soll, zwei Eintraege anlegen:
 
 ```json
 {
-  "id": "lars_sekundar",
-  "importance": "filler",
-  "valid_from": "2026-09-23",
-  "valid_until": "2026-12-31",
-  "variants": [
-    "Lars ist jetzt in der Sekundarschule.",
-    "Fuer Lars hat mit der Sekundarschule ein neuer Abschnitt begonnen."
-  ],
-  "priority": false,
-  "duration_sec": 35
+  "id": "judith_besuch_heute_2026_10_02",
+  "valid_from": "2026-10-02",
+  "valid_until": "2026-10-02",
+  "bubble": "Heute kommt Judith zu Besuch. Viel Spass zusammen.",
+  "button_label": null,
+  "action": { "type": "none" },
+  "neutral_only": true
 }
 ```
 
 Auswahl:
 
-- `priority: true` stoppt Fotos und zeigt diese Meldung dominant.
 - Wenn heute gueltige News existieren, werden sie deutlich bevorzugt.
 - Bevorstehende News erscheinen gelegentlich.
-- Filler fuellt auf, besonders wenn keine Tages-News aktiv sind.
-- Eine Meldung wird nicht direkt zweimal hintereinander gezeigt.
-- Eine Variante wird ebenfalls nicht direkt zweimal hintereinander gezeigt.
+- Allgemeiner Hintergrund-Content gehoert nach `common/suggestions.json`.
+- Fuer Varietaet mehrere Eintraege mit verschiedenen `bubble`-Texten anlegen.
+- Moveable Feiertage wie Ostern gehoeren als datierte News in diese Datei.
 
 ### Shared suggestions und recurring
 
@@ -552,12 +535,38 @@ common/recurring.json
 
 `common/suggestions.json` ist fuer passive, allgemeine Fuellmeldungen ohne
 Buttons oder Aktionen. Eintraege koennen ueber `rules.after_time` und
-`rules.before_time` zeitlich eingeschraenkt werden.
+`rules.before_time` zeitlich eingeschraenkt werden:
+
+```json
+{
+  "id": "fotoalbum_1",
+  "bubble": "Vielleicht ist heute ein guter Moment fuer ein altes Fotoalbum.",
+  "button_label": null,
+  "rules": {
+    "after_time": "10:00",
+    "before_time": "18:00"
+  },
+  "action": { "type": "none" }
+}
+```
 
 `common/recurring.json` ist fuer wiederkehrende Meldungen. Unterstuetzt sind:
 
 ```json
-{ "type": "weekly", "day_of_week": "friday", "after_time": "18:00", "before_time": "20:00" }
+{
+  "id": "reinigung_freitag",
+  "type": "weekly",
+  "day_of_week": "friday",
+  "bubble": "Heute kommt die Reinigung.",
+  "button_label": null,
+  "action": { "type": "none" },
+  "neutral_only": true
+}
+```
+
+Auch moeglich:
+
+```text
 { "type": "daily", "after_time": "11:00", "before_time": "12:30" }
 { "type": "annual", "month": 8, "day": 1 }
 ```
@@ -572,43 +581,33 @@ Beispiel `common/news.json`:
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 1,
   "items": [
     {
-      "id": "reinigung_freitag_2026_09_25",
-      "importance": "news",
-      "event_date": "2026-09-25",
-      "valid_from": "2026-09-23",
-      "valid_until": "2026-09-25",
-      "variants_before": [
-        "Am Freitag kommt die Reinigung.",
-        "Diese Woche kommt am Freitag wieder die Reinigung."
-      ],
-      "variants_today": [
-        "Heute kommt die Reinigung.",
-        "Heute ist Freitag, und die Reinigung kommt."
-      ],
-      "priority": false,
-      "duration_sec": 35
+      "id": "judith_besuch_vorschau_2026_10_02",
+      "valid_from": "2026-09-30",
+      "valid_until": "2026-10-01",
+      "bubble": "Am Freitag kommt Judith zu Besuch. Vielleicht geht ihr zusammen spazieren.",
+      "button_label": null,
+      "action": { "type": "none" },
+      "neutral_only": true
     },
     {
-      "id": "lars_sekundar",
-      "importance": "filler",
-      "valid_from": "2026-09-23",
-      "valid_until": "2026-12-31",
-      "variants": [
-        "Lars ist jetzt in der Sekundarschule.",
-        "Fuer Lars hat mit der Sekundarschule ein neuer Abschnitt begonnen."
-      ],
-      "priority": false,
-      "duration_sec": 35
+      "id": "judith_besuch_heute_2026_10_02",
+      "valid_from": "2026-10-02",
+      "valid_until": "2026-10-02",
+      "bubble": "Heute kommt Judith zu Besuch. Viel Spass zusammen.",
+      "button_label": null,
+      "action": { "type": "none" },
+      "neutral_only": true
     }
   ]
 }
 ```
 
-Alte Eintraege mit nur `text` funktionieren weiterhin. Neue Eintraege sollten
-aber `variants` oder `variants_before`/`variants_today` verwenden.
+Alte Mint2-Eintraege mit `text` oder `variants` funktionieren lokal weiterhin
+als Fallback. Neue Eintraege in `common/` sollten aber bewusst beim gemeinsamen
+`bubble`-Format bleiben.
 
 ## Info-Bilder
 

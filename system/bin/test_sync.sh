@@ -101,6 +101,17 @@ pruefe "Drive holt keine Fotos"           "$([[ ${TEXT} != *photos* ]] && echo j
 pruefe "OneDrive holt Fotos"              "$(hat "${MEDIA}" '[+ /mint2/photos/**]')"
 pruefe "OneDrive holt die Infobilder"     "$(hat "${MEDIA}" '[+ /mint2/info/**]')"
 pruefe "OneDrive holt Befehle"            "$(hat "${MEDIA}" '[+ /mint2/command/**]')"
+# update.txt kommt aus Drive, neustart.txt aus OneDrive. Beide landen im selben
+# lokalen Ordner, duerfen sich aber nicht gegenseitig ueberschreiben -- und die
+# Reihenfolge entscheidet, weil die erste passende Regel gewinnt.
+pruefe "Drive holt update.txt"            "$(hat "${TEXT}" '[+ /mint2/command/update.txt]')"
+pruefe "und zwar VOR dem Ausschluss"      \
+       "$([[ ${TEXT%%\[- /mint2/command/\*\*\]*} == *'[+ /mint2/command/update.txt]'* ]] && echo ja || echo nein)" \
+       "sonst faellt update.txt durch den command-Ausschluss"
+pruefe "OneDrive laesst update.txt liegen" "$(hat "${MEDIA}" '[- /mint2/command/update.txt]')"
+pruefe "und zwar VOR dem Einschluss"      \
+       "$([[ ${MEDIA%%\[+ /mint2/command/\*\*\]*} == *'[- /mint2/command/update.txt]'* ]] && echo ja || echo nein)" \
+       "sonst gewinnt OneDrive bei update.txt"
 pruefe "OneDrive holt keinen Text"        "$([[ ${MEDIA} != *common* && ${MEDIA} != *.json* ]] && echo ja || echo nein)"
 pruefe "keine Quelle fasst mint1/ an"     "$([[ ${AUFRUFE} != *mint1* ]] && echo ja || echo nein)" \
        "das Telefon geht den Rahmen nichts an"

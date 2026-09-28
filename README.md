@@ -835,11 +835,47 @@ bash ~/linuxmintphotoframe/system/bin/kiosk_healthcheck.sh
 
 ## Neustart aus der Ferne
 
-Remote-Neustart laeuft wie beim PAC, ueber OneDrive — Befehlsdateien bleiben
-bewusst dort und sind von der Drive-Drossel nicht betroffen:
+Zwei Fernbefehle, derselbe Mechanismus: eine Datei, deren **Inhalt eine Marke
+ist, kein Befehl**. Der Watchdog vergleicht sie mit einem Stempel in `~/state`
+und handelt nur bei einem *neuen* Wert. Die Marke wird nie ausgefuehrt, die
+Datei muss also nicht geloescht werden, und ein liegengebliebener Befehl kann
+keine Schleife ausloesen.
 
-```text
-mint2/command/neustart.txt
+| Datei | Cloud | Tut | Kommt an in |
+|---|---|---|---|
+| `mint2/command/neustart.txt` | OneDrive | startet den Rechner neu | ~2 Min. |
+| `mint2/command/update.txt` | Google Drive | holt `main` und rollt ihn aus | bis 30 Min. |
+
+Die Datei aendern — irgendein neuer Text, ein Datum genuegt — loest es einmal
+aus.
+
+**Warum sie in verschiedenen Clouds liegen.** `neustart.txt` ist der letzte Weg
+in die Maschine, wenn sonst nichts mehr geht; er darf nicht am selben Strang
+haengen wie der Weg, den ein kaputtes Deploy zerstoeren kann, und bleibt
+ausserdem von der Drive-Drossel verschont. `update.txt` liegt in Drive, weil
+dorthin auch ein Agent schreiben kann — ein Deploy laesst sich damit aus einem
+Chat ausloesen.
+
+**Was das Update tut**, in `photoframe_selfupdate.sh`:
+
+1. Sich selbst abgekoppelt neu starten (`setsid`). `kiosk_setup.sh` startet die
+   User-Dienste neu, darunter den Watchdog — ein Deploy als dessen Kind stirbt
+   mitten drin.
+2. Frisch nach `/tmp` klonen. `~/linuxmintphotoframe` ist kein Checkout, hier
+   gibt es kein `git pull`.
+3. `test_sync.sh` im Klon laufen lassen. Schlaegt er fehl, wird nichts
+   ausgerollt — die laufende Installation bleibt unberuehrt.
+4. Erst dann `kiosk_setup.sh` aus dem Klon.
+
+Alles landet in `~/state/kiosk.log`, die Details in `~/state/selfupdate.log`.
+
+Liegen beide Marken gleichzeitig neu an, laeuft erst das Update und dann der
+Neustart — sonst startet der Rahmen neu, bevor der neue Stand liegt.
+
+Von Hand, ohne auf den Sync zu warten:
+
+```bash
+bash ~/linuxmintphotoframe/system/bin/photoframe_selfupdate.sh
 ```
 
 Der Inhalt muss sich aendern, z.B.:

@@ -86,7 +86,9 @@ write_env_if_missing() {
     cat > "${ENV_FILE}" <<ENV_EOF
 # Linux Mint Photo Frame Kiosk
 FRAME_DATA_DIR=${HOME}/frame-data
+# Zwei Quellen: Text aus Google Drive, Fotos und Befehle aus OneDrive.
 RCLONE_SOURCE=thusis:KioskContent
+RCLONE_TEXT_SOURCE=gdrive:KioskContent
 PHOTOFRAME_PORT=8765
 
 # Optional display reset. Leave empty until xrandr output/mode are known.

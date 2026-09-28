@@ -54,7 +54,9 @@ printf "\n%sConfig%s\n" "${BOLD}" "${RESET}"
 info "ENV_FILE=${ENV_FILE}"
 info "FRAME_DATA_DIR=${FRAME_DATA_DIR}"
 info "PHOTOFRAME_PORT=${PHOTOFRAME_PORT}"
-info "RCLONE_SOURCE=${RCLONE_SOURCE:-}"
+info "RCLONE_SOURCE=${RCLONE_SOURCE:-}            (OneDrive: Fotos, Infobilder, Befehle)"
+info "RCLONE_TEXT_SOURCE=${RCLONE_TEXT_SOURCE:-gdrive:KioskContent}  (Drive: Meldungen, config, quiz)"
+info "TEXT_SYNC_MIN_INTERVAL_SEC=${TEXT_SYNC_MIN_INTERVAL_SEC:-1800}"
 info "DISK_WARN_FREE_MB=${DISK_WARN_FREE_MB}"
 info "DISK_MIN_SYNC_FREE_MB=${DISK_MIN_SYNC_FREE_MB}"
 
@@ -154,10 +156,42 @@ else
 fi
 
 printf "\n%sSync%s\n" "${BOLD}" "${RESET}"
+# Zwei Remotes: Drive besitzt den Text, OneDrive die Fotos und Befehle. Ein
+# fehlendes Drive-Remote ist der Ausfall, der nach nichts aussieht -- der
+# Rahmen laeuft auf seiner letzten Kopie weiter und zeigt nur keine neuen
+# Meldungen mehr. Darum steht er hier und nicht bloss im Log.
 if command -v rclone >/dev/null 2>&1; then
     ok "rclone installed"
+
+    remotes="$(rclone listremotes 2>/dev/null)"
+    for pair in "text|${RCLONE_TEXT_SOURCE:-gdrive:KioskContent}" "media|${RCLONE_SOURCE:-}"; do
+        label="${pair%%|*}"
+        source="${pair#*|}"
+        if [[ -z "${source}" ]]; then
+            warn "${label}: keine Quelle konfiguriert"
+        elif grep -qx -- "${source%%:*}:" <<< "${remotes}"; then
+            ok "${label} ${source} — Remote konfiguriert"
+        elif [[ "${label}" == "text" ]]; then
+            fail "${label}: Remote ${source%%:*}: fehlt — es kommen keine neuen Meldungen mehr an. Beheben mit: rclone config"
+        else
+            fail "${label}: Remote ${source%%:*}: fehlt — keine neuen Fotos und kein neustart.txt. Beheben mit: rclone config"
+        fi
+    done
+
+    STAMP="${STATE_DIR}/text-sync-last"
+    if [[ -f "${STAMP}" ]]; then
+        last="$(cat "${STAMP}" 2>/dev/null)"
+        if [[ "${last}" =~ ^[0-9]+$ ]]; then
+            age=$(( $(date +%s) - last ))
+            info "Letzter Drive-Versuch: vor $(( age / 60 )) min (gedrosselt auf alle $(( ${TEXT_SYNC_MIN_INTERVAL_SEC:-1800} / 60 )) min)"
+        else
+            warn "${STAMP} unlesbar — Drive wird beim naechsten Lauf geholt"
+        fi
+    else
+        info "Noch kein Drive-Versuch verzeichnet (${STAMP})"
+    fi
 else
-    warn "rclone missing"
+    fail "rclone fehlt — weder Google Drive noch OneDrive koennen kopiert werden"
 fi
 
 if [[ -f "${STATE_DIR}/rclone.log" ]]; then

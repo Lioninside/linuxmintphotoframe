@@ -207,10 +207,16 @@ throttled=0
 # Dateien direkt in mint2/, also config, info-images und quiz — nicht die
 # Ordner darunter.  command/ steht trotzdem als Ausschluss davor: ein dort
 # versehentlich angelegter Befehl soll nicht diesen Weg nehmen.
+#
+# Die eine Ausnahme ist update.txt, der Ausloeser fuer ein Code-Update.  Sie
+# steht vor dem command-Ausschluss, weil die erste passende Regel gewinnt.
+# Genau diese Datei soll aus Drive kommen: dorthin kann auch ein Agent
+# schreiben.  neustart.txt bleibt in OneDrive und damit ungedrosselt.
 text_age="$(text_pass_age)"
 if (( FORCE )) || [[ -z "${text_age}" ]] || (( text_age >= TEXT_SYNC_MIN_INTERVAL_SEC )); then
     date +%s > "${TEXT_STAMP_FILE}" 2>/dev/null || true
     run_copy "text" "${RCLONE_TEXT_SOURCE}" \
+        --filter "+ /mint2/command/update.txt" \
         --filter "- /mint2/command/**" \
         --filter "+ /common/**" \
         --filter "+ /mint2/*.json" \
@@ -228,6 +234,7 @@ fi
 run_copy "media" "${RCLONE_SOURCE}" \
     --filter "+ /mint2/photos/**" \
     --filter "+ /mint2/info/**" \
+    --filter "- /mint2/command/update.txt" \
     --filter "+ /mint2/command/**" \
     --filter "- *" || failed=1
 

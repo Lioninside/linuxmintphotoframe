@@ -29,6 +29,23 @@ REBOOT_FILES = [
 REBOOT_STAMP_FILE = kiosk_common.STATE_DIR / "neustart_zuletzt.txt"
 REBOOT_MAX_LEN = 200
 
+# Derselbe Mechanismus fuer ein Code-Update. Zwei Unterschiede zum Neustart,
+# beide Absicht:
+#
+#   * update.txt liegt in **Google Drive**, neustart.txt in OneDrive. Der
+#     Notweg haengt damit nicht am selben Strang wie der Weg, der ihn
+#     kaputtmachen kann.
+#   * Der Drive-Durchgang ist auf 30 Minuten gedrosselt (Googles
+#     Minutenkontingent, siehe onedrive_sync.sh). Ein Update kommt also mit bis
+#     zu einer halben Stunde Verzoegerung an, ein Neustart in zwei Minuten.
+#     Das ist die richtige Reihenfolge der Dringlichkeiten.
+UPDATE_FILES = [
+    FRAME_DATA_DIR / "mint2" / "command" / "update.txt",
+    FRAME_DATA_DIR / "command" / "update.txt",
+]
+UPDATE_STAMP_FILE = kiosk_common.STATE_DIR / "update_zuletzt.txt"
+UPDATE_SCRIPT = Path(__file__).resolve().parent / "photoframe_selfupdate.sh"
+
 
 def _run(cmd: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
     return kiosk_common.run(cmd, timeout=timeout, env=kiosk_common.x11_env())
@@ -113,39 +130,89 @@ def _do_reboot() -> bool:
     return False
 
 
-def _check_reboot_file() -> None:
-    reboot_file = None
+def _new_mark(candidates: list[Path], stamp_file: Path, what: str) -> str | None:
+    """Die Marke aus der ersten vorhandenen Befehlsdatei lesen, wenn sie neu ist.
+
+    Gibt die Marke zurueck, wenn gehandelt werden soll, sonst None. Der Stempel
+    wird **vorher** geschrieben: klappt die Aktion, das Schreiben danach aber
+    nicht, liefe der Rahmen sonst in eine Schleife.
+
+    Der Inhalt wird nie ausgefuehrt, nur verglichen. Er ist eine Marke, kein
+    Befehl.
+    """
+    source = None
     try:
-        for candidate in REBOOT_FILES:
+        for candidate in candidates:
             try:
                 mark = candidate.read_text(encoding="utf-8").strip()
-                reboot_file = candidate
+                source = candidate
                 break
             except FileNotFoundError:
                 continue
         else:
-            return
+            return None
     except OSError as exc:
-        LOG.warning("Cannot read reboot file %s: %r", reboot_file or REBOOT_FILES[0], exc)
-        return
+        LOG.warning("Cannot read %s file %s: %r", what, source or candidates[0], exc)
+        return None
 
     if not mark or len(mark) > REBOOT_MAX_LEN:
-        return
+        return None
 
     try:
-        previous = REBOOT_STAMP_FILE.read_text(encoding="utf-8").strip()
+        previous = stamp_file.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
-        REBOOT_STAMP_FILE.write_text(mark, encoding="utf-8")
-        LOG.info("Reboot mark first seen: %r (no reboot)", mark)
-        return
+        # Erster Lauf: merken, aber NICHT handeln. Sonst loest das blosse
+        # Ausrollen dieser Funktion die Aktion aus.
+        stamp_file.write_text(mark, encoding="utf-8")
+        LOG.info("%s mark first seen: %r (no action)", what, mark)
+        return None
+    except OSError:
+        return None
 
     if mark == previous:
-        return
+        return None
 
-    REBOOT_STAMP_FILE.write_text(mark, encoding="utf-8")
-    LOG.warning("INTERVENTION: new reboot mark %r (previous %r)", mark, previous)
-    if not _do_reboot():
-        LOG.error("Reboot requested, but no reboot method worked")
+    stamp_file.write_text(mark, encoding="utf-8")
+    LOG.warning("INTERVENTION: new %s mark %r from %s (previous %r)",
+                what, mark, source, previous)
+    return mark
+
+
+def _do_update() -> bool:
+    """Das Selbstupdate anstossen. True, wenn es gestartet werden konnte.
+
+    Das Skript koppelt sich selbst ab; wir warten hier nicht darauf. Muessten
+    wir es, wuerde der Watchdog blockieren, waehrend kiosk_setup.sh ihn gerade
+    neu startet.
+    """
+    if not UPDATE_SCRIPT.exists():
+        LOG.error("Update requested, but %s is missing", UPDATE_SCRIPT)
+        return False
+    try:
+        subprocess.Popen(
+            ["bash", str(UPDATE_SCRIPT)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        LOG.warning("INTERVENTION: self-update started via %s", UPDATE_SCRIPT)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        LOG.error("Could not start self-update: %r", exc)
+        return False
+
+
+def _check_command_files() -> None:
+    """Update und Neustart pruefen -- das Update zuerst.
+
+    Liegt beides gleichzeitig an, soll erst der neue Stand ausgerollt und dann
+    neu gestartet werden, nicht umgekehrt.
+    """
+    if _new_mark(UPDATE_FILES, UPDATE_STAMP_FILE, "update"):
+        _do_update()
+
+    if _new_mark(REBOOT_FILES, REBOOT_STAMP_FILE, "reboot"):
+        if not _do_reboot():
+            LOG.error("Reboot requested, but no reboot method worked")
 
 
 def main() -> int:
@@ -157,7 +224,7 @@ def main() -> int:
             _check_browser()
             _check_dpms()
             _check_display_mode()
-            _check_reboot_file()
+            _check_command_files()
         except Exception as exc:  # noqa: BLE001
             LOG.error("watchdog loop failed: %r", exc)
         time.sleep(LOOP_INTERVAL)

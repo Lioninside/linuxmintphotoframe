@@ -42,9 +42,10 @@ kann; er kennt damit jederzeit den aktuellen Stand der Dateien. Fotos bleiben in
 OneDrive, weil sie vom Telefon direkt dorthin hochgeladen werden.
 
 Die beiden Kopierlaeufe fassen getrennte Pfade an, koennen sich also nicht
-gegenseitig ueberschreiben. Der OneDrive-Lauf ist per `--include` auf Bilder und
+gegenseitig ueberschreiben. Der OneDrive-Lauf ist per `--filter` auf Bilder und
 Befehle beschraenkt: eine alte `news.json`, die noch in OneDrive liegt, wird
-schlicht nie kopiert. `mint1/` holt der Rahmen von keiner der beiden Quellen —
+schlicht nie kopiert. (`--include` neben `--exclude` waere hier falsch — rclone
+wertet die zwei in unbestimmter Reihenfolge aus.) `mint1/` holt der Rahmen von keiner der beiden Quellen —
 das gehoert dem Telefon-Kiosk.
 
 Lokal landet beides im selben Verzeichnis:
@@ -102,7 +103,7 @@ maintenance 10
 ~/.local/bin/maintenance 10
 ```
 
-Das stoppt Browser und Watchdog fuer 10 Minuten. Der lokale Server und OneDrive-Sync laufen weiter. Vorzeitig wieder starten:
+Das stoppt Browser und Watchdog fuer 10 Minuten. Der lokale Server und der Sync laufen weiter. Vorzeitig wieder starten:
 
 ```bash
 maintenance off
@@ -138,7 +139,7 @@ cd linuxmintphotoframe
 bash system/bin/kiosk_setup.sh
 ```
 
-Das Setup behaelt `~/.config/linuxmintphotoframe/env` bei. OneDrive-Konfig,
+Das Setup behaelt `~/.config/linuxmintphotoframe/env` bei. Die Cloud-Konfiguration,
 lokale Daten unter `~/frame-data` und die rclone-Anmeldung bleiben erhalten.
 
 Das Setup schreibt bei Bedarf:
@@ -704,7 +705,7 @@ mint2/info/arzttermin.png
 
 ## Anzeige-Tuning
 
-Die wichtigsten Takt- und Lesbarkeitswerte liegen in OneDrive:
+Die wichtigsten Takt- und Lesbarkeitswerte liegen in **Google Drive**:
 
 ```text
 KioskContent/mint2/config.json
@@ -732,7 +733,7 @@ Hinweise:
 - News/Suggestions werden wie Quiz vollflaechig dunkelblau mit sehr grosser
   weisser Schrift angezeigt. Das Foto im Hintergrund wird dabei ausgeblendet.
 
-Bei bestehenden Installationen die vorhandene `config.json` in OneDrive anpassen.
+Bei bestehenden Installationen die vorhandene `config.json` in Google Drive anpassen.
 Das Setup ersetzt sie nicht automatisch, damit lokale Einstellungen erhalten bleiben.
 
 ## Wartungsmodus
@@ -770,7 +771,7 @@ Damit wird nicht laufend ein neues Bild geladen. Wenn die Kamera stoert:
 
 ## Quizfragen
 
-Datei im OneDrive-Ordner:
+Datei in **Google Drive**:
 
 ```text
 KioskContent/mint2/quiz.json
@@ -821,8 +822,8 @@ RCLONE_LOG_KEEP_LINES=2000   # letzte rclone-Logzeilen behalten
 ```
 
 Wenn zu wenig Speicher frei ist, bleibt der bestehende lokale Datenbestand
-unveraendert. Neue OneDrive-Inhalte werden dann nicht mehr nachgeladen, bis
-wieder Platz frei ist.
+unveraendert. Neue Inhalte werden dann aus keiner der beiden Quellen mehr
+nachgeladen, bis wieder Platz frei ist.
 
 Pruefen:
 
@@ -834,7 +835,8 @@ bash ~/linuxmintphotoframe/system/bin/kiosk_healthcheck.sh
 
 ## Neustart aus der Ferne
 
-Remote-Neustart laeuft wie beim PAC, aber lokal ueber OneDrive:
+Remote-Neustart laeuft wie beim PAC, ueber OneDrive — Befehlsdateien bleiben
+bewusst dort und sind von der Drive-Drossel nicht betroffen:
 
 ```text
 mint2/command/neustart.txt

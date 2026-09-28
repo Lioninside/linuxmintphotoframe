@@ -3,37 +3,51 @@
 Schlanker Linux-Mint-Kiosk fuer einen digitalen Bilderrahmen:
 
 - Fotos kommen privat aus einem OneDrive-Ordner.
-- Textmeldungen und Info-Bilder kommen ebenfalls aus diesem OneDrive-Ordner.
+- Textmeldungen kommen aus einem Google-Drive-Ordner, den der Content-Agent
+  direkt beschreiben kann.
 - Firefox zeigt lokal eine Fotoframe-Webapp im Kiosk-Modus.
 - Ein Watchdog haelt Browser, Fullscreen, Display und Remote-Neustart stabil.
 
-Git enthaelt nur Code, Setup und Beispiele. Private Inhalte bleiben in OneDrive.
+Git enthaelt nur Code, Setup und Beispiele. Private Inhalte bleiben in der Cloud.
 
 ## Zielbild
 
+Beide Clouds tragen denselben Baum `KioskContent`, aber jede besitzt nur einen
+Teil davon. Was der Rahmen von wo holt:
+
 ```text
-Thusis OneDrive/KioskContent/
-  common/
+KioskContent/
+  common/                      <- Google Drive
     news.json
     suggestions.json
     recurring.json
     archive/
       news-archiv.json
   mint2/
-    config.json
-    info-images.json
-    quiz.json
-    photos/
+    config.json                <- Google Drive
+    info-images.json           <- Google Drive (die Liste)
+    quiz.json                  <- Google Drive
+    photos/                    <- OneDrive
       ferien-01.jpg
       familie-02.jpg
-    info/
+    info/                      <- OneDrive (die Bilder, die die Liste nennt)
       pommes.png
       arzttermin.png
-    command/
+    command/                   <- OneDrive
       neustart.txt
 ```
 
-Auf Mint wird nur `common/` und `mint2/` per `rclone` nach lokal kopiert:
+Text steht in Google Drive, weil der Content-Agent dort lesen **und** schreiben
+kann; er kennt damit jederzeit den aktuellen Stand der Dateien. Fotos bleiben in
+OneDrive, weil sie vom Telefon direkt dorthin hochgeladen werden.
+
+Die beiden Kopierlaeufe fassen getrennte Pfade an, koennen sich also nicht
+gegenseitig ueberschreiben. Der OneDrive-Lauf ist per `--include` auf Bilder und
+Befehle beschraenkt: eine alte `news.json`, die noch in OneDrive liegt, wird
+schlicht nie kopiert. `mint1/` holt der Rahmen von keiner der beiden Quellen —
+das gehoert dem Telefon-Kiosk.
+
+Lokal landet beides im selben Verzeichnis:
 
 ```text
 /home/<user>/frame-data/
@@ -49,14 +63,32 @@ http://127.0.0.1:8765/
 
 ## Installation auf Mint
 
-Einmalig `rclone` fuer den **Thusis-OneDrive** konfigurieren. Empfohlener
-Remote-Name:
+Einmalig **zwei** rclone-Remotes konfigurieren. Die Namen sind nicht frei
+waehlbar, das Sync-Skript sucht genau nach diesen:
 
 ```bash
 rclone config
 # Name: thusis
 # Type: Microsoft OneDrive
+
+rclone config
+# Name: gdrive
+# Type: Google Drive
+# Konto: huber.rosemary@gmail.com
 ```
+
+Pruefen, dass beide da sind — das Skript erkennt einen Remote nur bei exakt
+diesem Namen:
+
+```bash
+rclone listremotes
+# gdrive:
+# thusis:
+```
+
+Fehlt einer, laeuft der Rahmen trotzdem weiter: der fehlende Lauf wird mit einer
+WARN-Zeile in `~/state/kiosk.log` uebersprungen, der andere kopiert normal.
+Ohne `gdrive:` sieht der Rahmen allerdings keine Textaenderungen mehr.
 
 Wichtig: Auf dem Windows-Arbeitsgeraet gibt es mehrere OneDrives. Fuer diesen
 Kiosk zaehlt nur der Thusis-OneDrive auf dem Mint-Geraet. STC/work und
@@ -120,12 +152,46 @@ Standardwerte:
 ```bash
 FRAME_DATA_DIR=/home/<user>/frame-data
 RCLONE_SOURCE=thusis:KioskContent
+RCLONE_TEXT_SOURCE=gdrive:KioskContent
 PHOTOFRAME_PORT=8765
 DISPLAY_OUTPUT=
 DISPLAY_MODE=
+TEXT_SYNC_MIN_INTERVAL_SEC=1800
 ```
 
-Wenn der rclone-Remote anders heisst, `RCLONE_SOURCE` dort anpassen und danach:
+Eine **bereits vorhandene** env-Datei ruehrt das Setup nicht an, dort fehlen die
+zwei neuen Zeilen also weiterhin. Das ist in Ordnung: das Sync-Skript setzt
+dieselben Werte selbst ein, wenn sie fehlen. Eintragen muss man sie nur, wenn
+der Drive-Ordner woanders liegt oder der Takt anders sein soll.
+
+### Warum Drive seltener als OneDrive abgefragt wird
+
+Der Timer laeuft alle zwei Minuten, damit neue Fotos und `neustart.txt` schnell
+ankommen. Google Drive wird dabei hoechstens alle `TEXT_SYNC_MIN_INTERVAL_SEC`
+Sekunden angefasst (Vorgabe 30 Minuten), festgehalten in
+`~/state/text-sync-last`.
+
+Der Grund ist Googles Kontingent: ohne eigene `client_id` meldet sich rclone mit
+einer OAuth-Kennung an, die sich alle rclone-Nutzer weltweit teilen. Alle zwei
+Minuten reicht, um in `403 Quota exceeded ... Requests per minute` zu laufen —
+beobachtet am 28.09.2026. Text aendert sich hoechstens woechentlich, halbstuendlich
+ist also reichlich.
+
+Der Zeitstempel wird **vor** dem Kopieren gesetzt, nicht danach. Ein gescheiterter
+Drive-Lauf wartet damit ebenfalls das Intervall ab, statt alle zwei Minuten gegen
+ein erschoepftes Kontingent zu laufen.
+
+Fuer einen Lauf von Hand, der nicht warten soll:
+
+```bash
+bash ~/linuxmintphotoframe/system/bin/onedrive_sync.sh --force
+```
+
+Wer das Kontingent ganz loswerden will, legt bei Google eine eigene `client_id`
+an und traegt sie mit `rclone config` beim Remote `gdrive` ein.
+
+Wenn ein rclone-Remote anders heisst, die passende Zeile dort anpassen und
+danach:
 
 ```bash
 systemctl --user restart linuxmintphotoframe-sync.service
@@ -200,40 +266,35 @@ unangetastet.
 
 ## Inhalte aktualisieren
 
-Alles passiert im Thusis-OneDrive-Ordner `KioskContent`.
 Normale Mini-Updates werden **nicht** auf dem Mint-PC gepflegt. Der Mint ist
-Laufzeitgeraet und spiegelt nur. Inhalte werden ueber **OneDrive Web** auf einem
-anderen PC bearbeitet und vom Kiosk danach automatisch abgeholt.
+Laufzeitgeraet und spiegelt nur. Mint-Terminal/AnyDesk wird nur fuer Setup,
+Migration, Diagnose, Healthcheck, Sync-Test oder Neustart verwendet.
 
-Mint-Terminal/AnyDesk wird nur fuer Setup, Migration, Diagnose, Healthcheck,
-Sync-Test oder Neustart verwendet.
+Entscheidend ist, **in welcher Cloud** eine Datei bearbeitet wird. Wer die
+falsche erwischt, aendert etwas, das nie kopiert wird — ohne Fehlermeldung.
 
-Fotos:
+Im **Thusis-OneDrive**, ueber OneDrive Web oder das Telefon:
 
 ```text
-mint2/photos/
+mint2/photos/          Fotos
+mint2/info/*.png       die Info-Bilder selbst
+mint2/command/         neustart.txt und andere Befehle
 ```
 
-Textmeldungen:
+In **Google Drive** (`KioskContent`), direkt vom Content-Agenten:
 
 ```text
 common/news.json
 common/suggestions.json
 common/recurring.json
-```
-
-Info-Bilder:
-
-```text
-mint2/info-images.json
-mint2/info/*.png
-```
-
-Quizfragen:
-
-```text
+mint2/info-images.json   die Liste, die die PNGs oben nennt
 mint2/quiz.json
+mint2/config.json
 ```
+
+`mint2/info-images.json` und `mint2/info/` gehoeren inhaltlich zusammen, liegen
+aber bewusst getrennt: die Liste ist Text und damit Drive, die Bilder sind
+Bilder und damit OneDrive. Ein neues Info-Bild braucht deshalb beides.
 
 Der Mint synchronisiert alle zwei Minuten. Die Anzeige prueft den lokalen Stand
 regelmaessig und braucht normalerweise keinen Neustart.
@@ -247,24 +308,25 @@ ls -la ~/frame-data
 ls -la ~/frame-data/mint2/photos
 ```
 
-## Content via OneDrive Web und Agent
+Selbsttest der Zwei-Quellen-Logik, ohne Netz und ohne echte Remotes:
+
+```bash
+bash ~/linuxmintphotoframe/system/bin/test_sync.sh
+```
+
+## Content via Agent
 
 Kurzes Briefing fuer andere Agenten: `CONTENT_AGENT_BRIEF.md`.
 
-Die einfachste Pflege laeuft so:
+Text pflegt der Agent direkt in Google Drive: er liest die aktuelle Datei, aendert
+sie und schreibt sie zurueck. Kein Kopieren, kein Einfuegen, und vor allem kein
+Ratespiel darueber, was gerade drinsteht — genau daran ist der frueher hier
+beschriebene Paste-Weg gescheitert.
 
-1. Bestehende `common/news.json`, `common/suggestions.json`,
-   `common/recurring.json` oder `mint2/info-images.json` aus dem
-   Thusis-OneDrive in **OneDrive Web** oeffnen.
-2. Inhalt in ChatGPT/Codex einfuegen.
-3. Einen der Prompts unten verwenden.
-4. Der Agent gibt die **komplette neue JSON-Datei** zurueck.
-5. Diese komplette Datei in OneDrive Web ersetzen und speichern.
-
-Der Agent hat keinen direkten Zugriff auf den Thusis-OneDrive. Er darf fuer
-Content-Miniupdates nicht den lokalen STC-OneDrive, Lioninside-OneDrive oder
-einen Windows-Ordner verwenden. Wenn die aktuelle Datei nicht im Prompt
-mitgeliefert wurde, muss der Agent nach der kompletten Datei fragen.
+Fuer die Dateien, die in OneDrive bleiben (Fotos, `mint2/info/*.png`), gilt
+weiterhin der Weg ueber OneDrive Web oder das Telefon. Ein Agent hat dorthin
+keinen Zugriff; er kann nur die zugehoerige Liste in Drive pflegen und muss
+sagen, welches Bild noch fehlt.
 
 Wichtig:
 

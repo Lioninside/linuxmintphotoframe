@@ -12,13 +12,19 @@
 #                        Drive.
 #
 # The two passes touch disjoint paths, so neither can overwrite the other and
-# the order does not matter.  Restricting the OneDrive pass by --include is
-# what makes Drive authoritative for text: a stale news.json left on OneDrive
-# is simply never copied.  Note the pair that reads alike but is split:
-# mint2/info-images.json (the list, from Drive) and mint2/info/ (the pictures
-# it names, from OneDrive).
+# the order does not matter.  Restricting the OneDrive pass to pictures and
+# commands is what makes Drive authoritative for text: a stale news.json left
+# on OneDrive is simply never copied.  Note the pair that reads alike but is
+# split: mint2/info-images.json (the list, from Drive) and mint2/info/ (the
+# pictures it names, from OneDrive).
 #
 # Neither pass copies mint1/ — that belongs to the kiosk, not to the frame.
+#
+# The paths are selected with --filter, never with --include plus --exclude.
+# rclone parses those two in an indeterminate order and says so on stderr; the
+# whole split hangs on "exclude beats include", so it must not be left to
+# chance.  --filter rules are applied strictly top to bottom, first match wins,
+# and the closing "- *" drops everything not named above it.
 #
 # Both passes are `rclone copy`, never `sync`: an incomplete or briefly
 # unreachable remote must not wipe content off a stable frame.  `sync` would
@@ -28,6 +34,12 @@
 # A source whose rclone remote is not configured yet is skipped with a warning
 # instead of failing the run — so this script can be rolled out before the
 # Google Drive remote has been authorised.
+#
+# The Drive pass is throttled by TEXT_SYNC_MIN_INTERVAL_SEC.  The timer fires
+# every couple of minutes so that new photos and neustart.txt arrive quickly,
+# but text changes once a week at most, and rclone's shared OAuth client runs
+# into Google's per-minute quota long before that rate is useful.  Pass
+# --force to bypass the throttle for a manual run.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -53,6 +65,11 @@ DISK_WARN_FREE_MB="${DISK_WARN_FREE_MB:-10240}"
 DISK_MIN_SYNC_FREE_MB="${DISK_MIN_SYNC_FREE_MB:-3072}"
 RCLONE_LOG_MAX_BYTES="${RCLONE_LOG_MAX_BYTES:-2000000}"
 RCLONE_LOG_KEEP_LINES="${RCLONE_LOG_KEEP_LINES:-2000}"
+TEXT_SYNC_MIN_INTERVAL_SEC="${TEXT_SYNC_MIN_INTERVAL_SEC:-1800}"
+
+TEXT_STAMP_FILE="${STATE_DIR}/text-sync-last"
+FORCE=0
+[[ "${1:-}" == "--force" ]] && FORCE=1
 
 ts() { date "+%Y-%m-%dT%H:%M:%S"; }
 log() { printf '%s | onedrive_sync | %s | %s\n' "$(ts)" "$1" "$2" >> "${LOG_FILE}" 2>/dev/null || true; }
@@ -64,6 +81,19 @@ sanitize_number_settings() {
     is_uint "${DISK_MIN_SYNC_FREE_MB}" || DISK_MIN_SYNC_FREE_MB=3072
     is_uint "${RCLONE_LOG_MAX_BYTES}" || RCLONE_LOG_MAX_BYTES=2000000
     is_uint "${RCLONE_LOG_KEEP_LINES}" || RCLONE_LOG_KEEP_LINES=2000
+    is_uint "${TEXT_SYNC_MIN_INTERVAL_SEC}" || TEXT_SYNC_MIN_INTERVAL_SEC=1800
+}
+
+# Wie lange der letzte Drive-Versuch her ist, in Sekunden.  Kein Stempel, eine
+# kaputte Datei oder eine zurueckgestellte Uhr heissen "faellig".
+text_pass_age() {
+    local last now age
+    last="$(cat "${TEXT_STAMP_FILE}" 2>/dev/null || true)"
+    is_uint "${last}" || { echo ""; return 0; }
+    now="$(date +%s)"
+    age=$(( now - last ))
+    (( age < 0 )) && { echo ""; return 0; }
+    echo "${age}"
 }
 
 free_mb_for_path() {
@@ -128,9 +158,10 @@ run_copy() {
     local rc=0
     rclone copy "${source}" "${FRAME_DATA_DIR}" \
         --create-empty-src-dirs \
-        --exclude ".DS_Store" \
-        --exclude "Thumbs.db" \
+        --filter "- .DS_Store" \
+        --filter "- Thumbs.db" \
         "$@" \
+        --filter "- *" \
         --transfers 4 \
         --checkers 8 \
         --timeout 30s \
@@ -170,23 +201,33 @@ rotate_rclone_log
 
 failed=0
 copied=0
+throttled=0
 
-# Text und Konfiguration aus Google Drive.  mint2/*.json trifft nur die Dateien
-# direkt in mint2/, also config, info-images und quiz — nicht die Ordner
-# darunter.  command/ ist zusaetzlich ausgeschlossen: ein dort versehentlich
-# angelegter Befehl soll nicht diesen Weg nehmen.
-run_copy "text" "${RCLONE_TEXT_SOURCE}" \
-    --exclude "mint2/command/**" \
-    --include "common/**" \
-    --include "mint2/*.json" || failed=1
+# Text und Konfiguration aus Google Drive.  /mint2/*.json trifft nur die
+# Dateien direkt in mint2/, also config, info-images und quiz — nicht die
+# Ordner darunter.  command/ steht trotzdem als Ausschluss davor: ein dort
+# versehentlich angelegter Befehl soll nicht diesen Weg nehmen.
+text_age="$(text_pass_age)"
+if (( FORCE )) || [[ -z "${text_age}" ]] || (( text_age >= TEXT_SYNC_MIN_INTERVAL_SEC )); then
+    date +%s > "${TEXT_STAMP_FILE}" 2>/dev/null || true
+    run_copy "text" "${RCLONE_TEXT_SOURCE}" \
+        --filter "- /mint2/command/**" \
+        --filter "+ /common/**" \
+        --filter "+ /mint2/*.json" || failed=1
+else
+    # Kein Fehler: Text aendert sich hoechstens woechentlich, und jeder
+    # Drive-Aufruf zaehlt gegen Googles Minutenkontingent.
+    throttled=1
+    log "INFO" "text: last attempt $(( text_age / 60 )) min ago, next in $(( (TEXT_SYNC_MIN_INTERVAL_SEC - text_age + 59) / 60 )) min"
+fi
 
-# Bilder und Befehle aus OneDrive.  --include schliesst alles Uebrige
-# automatisch aus — OneDrives Textdateien werden also bewusst NICHT kopiert.
-# Genau das macht Google Drive zur massgebenden Quelle fuer Text.
+# Bilder und Befehle aus OneDrive.  Was hier nicht steht, faellt durch das
+# abschliessende "- *" — OneDrives Textdateien werden also bewusst NICHT
+# kopiert.  Genau das macht Google Drive zur massgebenden Quelle fuer Text.
 run_copy "media" "${RCLONE_SOURCE}" \
-    --include "mint2/photos/**" \
-    --include "mint2/info/**" \
-    --include "mint2/command/**" || failed=1
+    --filter "+ /mint2/photos/**" \
+    --filter "+ /mint2/info/**" \
+    --filter "+ /mint2/command/**" || failed=1
 
 if (( failed )); then
     log "ERROR" "at least one source failed; local data left as it was"
@@ -196,8 +237,13 @@ fi
 if (( copied == 0 )); then
     # Kein konfiguriertes Remote — der Rahmen laeuft auf dem, was lokal liegt.
     # Kein Fehler, aber auch kein Erfolg: das darf nicht wie ein gelungener
-    # Abgleich aussehen.
-    log "WARN" "no source was configured; local data untouched"
+    # Abgleich aussehen.  Eine gedrosselte Textquelle ist etwas anderes als
+    # eine fehlende, darum zwei Meldungen.
+    if (( throttled )); then
+        log "INFO" "nothing copied: text throttled, no other source configured"
+    else
+        log "WARN" "no source was configured; local data untouched"
+    fi
     exit 0
 fi
 

@@ -156,12 +156,39 @@ RCLONE_TEXT_SOURCE=gdrive:KioskContent
 PHOTOFRAME_PORT=8765
 DISPLAY_OUTPUT=
 DISPLAY_MODE=
+TEXT_SYNC_MIN_INTERVAL_SEC=1800
 ```
 
-Eine **bereits vorhandene** env-Datei ruehrt das Setup nicht an, dort fehlt
-`RCLONE_TEXT_SOURCE` also weiterhin. Das ist in Ordnung: das Sync-Skript setzt
-denselben Wert selbst ein, wenn die Zeile fehlt. Eintragen muss man sie nur,
-wenn der Drive-Ordner woanders liegt.
+Eine **bereits vorhandene** env-Datei ruehrt das Setup nicht an, dort fehlen die
+zwei neuen Zeilen also weiterhin. Das ist in Ordnung: das Sync-Skript setzt
+dieselben Werte selbst ein, wenn sie fehlen. Eintragen muss man sie nur, wenn
+der Drive-Ordner woanders liegt oder der Takt anders sein soll.
+
+### Warum Drive seltener als OneDrive abgefragt wird
+
+Der Timer laeuft alle zwei Minuten, damit neue Fotos und `neustart.txt` schnell
+ankommen. Google Drive wird dabei hoechstens alle `TEXT_SYNC_MIN_INTERVAL_SEC`
+Sekunden angefasst (Vorgabe 30 Minuten), festgehalten in
+`~/state/text-sync-last`.
+
+Der Grund ist Googles Kontingent: ohne eigene `client_id` meldet sich rclone mit
+einer OAuth-Kennung an, die sich alle rclone-Nutzer weltweit teilen. Alle zwei
+Minuten reicht, um in `403 Quota exceeded ... Requests per minute` zu laufen —
+beobachtet am 28.09.2026. Text aendert sich hoechstens woechentlich, halbstuendlich
+ist also reichlich.
+
+Der Zeitstempel wird **vor** dem Kopieren gesetzt, nicht danach. Ein gescheiterter
+Drive-Lauf wartet damit ebenfalls das Intervall ab, statt alle zwei Minuten gegen
+ein erschoepftes Kontingent zu laufen.
+
+Fuer einen Lauf von Hand, der nicht warten soll:
+
+```bash
+bash ~/linuxmintphotoframe/system/bin/onedrive_sync.sh --force
+```
+
+Wer das Kontingent ganz loswerden will, legt bei Google eine eigene `client_id`
+an und traegt sie mit `rclone config` beim Remote `gdrive` ein.
 
 Wenn ein rclone-Remote anders heisst, die passende Zeile dort anpassen und
 danach:

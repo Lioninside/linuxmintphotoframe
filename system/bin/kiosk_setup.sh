@@ -100,6 +100,11 @@ DISK_WARN_FREE_MB=10240
 DISK_MIN_SYNC_FREE_MB=3072
 RCLONE_LOG_MAX_BYTES=2000000
 RCLONE_LOG_KEEP_LINES=2000
+
+# Wie oft der Timer hoechstens Google Drive anfasst. Der Timer selbst laeuft
+# alle zwei Minuten fuer Fotos und Befehle; Text braucht das nicht, und jeder
+# Drive-Aufruf zaehlt gegen Googles Minutenkontingent.
+TEXT_SYNC_MIN_INTERVAL_SEC=1800
 ENV_EOF
     ok "Created ${ENV_FILE}"
 }

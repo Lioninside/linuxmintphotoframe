@@ -23,8 +23,9 @@
 # The paths are selected with --filter, never with --include plus --exclude.
 # rclone parses those two in an indeterminate order and says so on stderr; the
 # whole split hangs on "exclude beats include", so it must not be left to
-# chance.  --filter rules are applied strictly top to bottom, first match wins,
-# and the closing "- *" drops everything not named above it.
+# chance.  --filter rules are applied strictly top to bottom, first match wins.
+# Each pass names what it wants and closes its list with "- *", which drops
+# everything not named above it.
 #
 # Both passes are `rclone copy`, never `sync`: an incomplete or briefly
 # unreachable remote must not wipe content off a stable frame.  `sync` would
@@ -161,7 +162,6 @@ run_copy() {
         --filter "- .DS_Store" \
         --filter "- Thumbs.db" \
         "$@" \
-        --filter "- *" \
         --transfers 4 \
         --checkers 8 \
         --timeout 30s \
@@ -213,7 +213,8 @@ if (( FORCE )) || [[ -z "${text_age}" ]] || (( text_age >= TEXT_SYNC_MIN_INTERVA
     run_copy "text" "${RCLONE_TEXT_SOURCE}" \
         --filter "- /mint2/command/**" \
         --filter "+ /common/**" \
-        --filter "+ /mint2/*.json" || failed=1
+        --filter "+ /mint2/*.json" \
+        --filter "- *" || failed=1
 else
     # Kein Fehler: Text aendert sich hoechstens woechentlich, und jeder
     # Drive-Aufruf zaehlt gegen Googles Minutenkontingent.
@@ -227,7 +228,8 @@ fi
 run_copy "media" "${RCLONE_SOURCE}" \
     --filter "+ /mint2/photos/**" \
     --filter "+ /mint2/info/**" \
-    --filter "+ /mint2/command/**" || failed=1
+    --filter "+ /mint2/command/**" \
+    --filter "- *" || failed=1
 
 if (( failed )); then
     log "ERROR" "at least one source failed; local data left as it was"

@@ -199,48 +199,82 @@ systemctl --user restart linuxmintphotoframe-sync.service
 systemctl --user restart linuxmintphotoframe-server.service
 ```
 
-### OneDrive-Ordner initialisieren oder migrieren
+### Ordner initialisieren oder migrieren
 
-Wenn der Remote `thusis` eingerichtet ist, aber `KioskContent/mint2` noch nicht
-existiert:
+> **Achtung, haeufigster Fehlgriff.** Der Baum `KioskContent` existiert in
+> beiden Clouds, aber jede besitzt nur einen Teil. Wer eine JSON-Datei nach
+> **OneDrive** legt, legt sie an einen Ort, den der Sync fuer Text gar nicht
+> mehr liest — ohne Fehlermeldung, ohne Log-Eintrag. Die Datei liegt dann
+> einfach da, und der Rahmen zeigt weiter den alten Stand.
+>
+> Bis 28.09.2026 stand hier genau das: `rclone copyto ... thusis:.../quiz.json`.
+> Falls das jemand ausgefuehrt hat, liegen die Textdateien noch in OneDrive und
+> gehoeren nach Drive verschoben — siehe unten.
+
+**Textdateien nach Google Drive:**
 
 ```bash
-rclone mkdir thusis:KioskContent/common
-rclone mkdir thusis:KioskContent/common/archive
-rclone mkdir thusis:KioskContent/mint2/photos
-rclone mkdir thusis:KioskContent/mint2/info
-rclone mkdir thusis:KioskContent/mint2/command
+rclone mkdir gdrive:KioskContent/common
+rclone mkdir gdrive:KioskContent/common/archive
+rclone mkdir gdrive:KioskContent/mint2
+rclone mkdir gdrive:KioskContent/mint2/command
 
-rclone copyto ~/linuxmintphotoframe/examples/config.json thusis:KioskContent/mint2/config.json
-rclone copyto ~/linuxmintphotoframe/examples/info-images.json thusis:KioskContent/mint2/info-images.json
-rclone copyto ~/linuxmintphotoframe/examples/quiz.json thusis:KioskContent/mint2/quiz.json
+rclone copyto ~/linuxmintphotoframe/examples/config.json gdrive:KioskContent/mint2/config.json
+rclone copyto ~/linuxmintphotoframe/examples/info-images.json gdrive:KioskContent/mint2/info-images.json
+rclone copyto ~/linuxmintphotoframe/examples/quiz.json gdrive:KioskContent/mint2/quiz.json
 
 # Nur falls common/news.json noch nicht durch Mint1/PAC existiert:
-if ! rclone lsf thusis:KioskContent/common | grep -qx 'news.json'; then
-  rclone copyto ~/linuxmintphotoframe/examples/news.json thusis:KioskContent/common/news.json
+if ! rclone lsf gdrive:KioskContent/common | grep -qx 'news.json'; then
+  rclone copyto ~/linuxmintphotoframe/examples/news.json gdrive:KioskContent/common/news.json
 fi
 ```
 
-Pruefen:
+**Bilder und Befehle nach OneDrive:**
 
 ```bash
-rclone lsf -R thusis:KioskContent | sort
-bash ~/linuxmintphotoframe/system/bin/onedrive_sync.sh
-ls -la ~/frame-data
+rclone mkdir thusis:KioskContent/mint2/photos
+rclone mkdir thusis:KioskContent/mint2/info
+rclone mkdir thusis:KioskContent/mint2/command
 ```
 
-Wenn bereits der alte Ordner `Fotoframe` existiert, die Mint2-spezifischen
-Dateien einmalig verschieben/kopieren:
+Pruefen — beide Seiten, sonst sieht man nur die Haelfte:
 
 ```bash
-rclone copyto thusis:Fotoframe/config.json thusis:KioskContent/mint2/config.json
-rclone copyto thusis:Fotoframe/info-images.json thusis:KioskContent/mint2/info-images.json
-rclone copyto thusis:Fotoframe/quiz.json thusis:KioskContent/mint2/quiz.json
-rclone copy thusis:Fotoframe/photos thusis:KioskContent/mint2/photos
-rclone copy thusis:Fotoframe/info thusis:KioskContent/mint2/info
+rclone lsf -R gdrive:KioskContent | sort
+rclone lsf -R thusis:KioskContent | sort
+bash ~/linuxmintphotoframe/system/bin/onedrive_sync.sh --force
+ls -la ~/frame-data ~/frame-data/common ~/frame-data/mint2
+```
 
-if ! rclone lsf thusis:KioskContent/common | grep -qx 'news.json'; then
-  rclone copyto thusis:Fotoframe/news.json thusis:KioskContent/common/news.json
+#### Textdateien aus OneDrive nach Drive holen
+
+Wenn `quiz.json`, `config.json`, `info-images.json` oder `common/*.json` noch
+in OneDrive liegen — aus dem alten Ordner `Fotoframe` oder aus der frueheren
+Fassung dieser Anleitung:
+
+```bash
+rclone copyto thusis:KioskContent/mint2/config.json      gdrive:KioskContent/mint2/config.json
+rclone copyto thusis:KioskContent/mint2/info-images.json gdrive:KioskContent/mint2/info-images.json
+rclone copyto thusis:KioskContent/mint2/quiz.json        gdrive:KioskContent/mint2/quiz.json
+rclone copy   thusis:KioskContent/common                 gdrive:KioskContent/common
+```
+
+Die OneDrive-Fassungen danach loeschen. Solange sie liegenbleiben, sind sie
+harmlos — kopiert werden sie nie —, aber sie sehen bei einem Blick in OneDrive
+aus wie der gueltige Stand, und genau daran ist die alte Architektur
+gescheitert.
+
+Aus dem alten Ordner `Fotoframe`, falls es ihn noch gibt:
+
+```bash
+rclone copyto thusis:Fotoframe/config.json      gdrive:KioskContent/mint2/config.json
+rclone copyto thusis:Fotoframe/info-images.json gdrive:KioskContent/mint2/info-images.json
+rclone copyto thusis:Fotoframe/quiz.json        gdrive:KioskContent/mint2/quiz.json
+rclone copy   thusis:Fotoframe/photos           thusis:KioskContent/mint2/photos
+rclone copy   thusis:Fotoframe/info             thusis:KioskContent/mint2/info
+
+if ! rclone lsf gdrive:KioskContent/common | grep -qx 'news.json'; then
+  rclone copyto thusis:Fotoframe/news.json gdrive:KioskContent/common/news.json
 fi
 ```
 

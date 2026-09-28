@@ -163,6 +163,23 @@ pruefe "zweiter Lauf versucht Drive nicht erneut" "$([[ ${AUFRUFE} != *gdrive* ]
 pruefe "und meldet darum keinen Fehler"   "$([[ ${RC} -eq 0 ]] && echo ja || echo nein)" "exit=${RC}"
 
 echo
+echo "=== 8) Die Anleitung schickt keine Textdatei nach OneDrive ==="
+# Zweimal passiert: das README nannte JSON-Dateien als OneDrive-Inhalt, obwohl
+# der Sync sie dort nicht mehr liest.  Wer danach arbeitet, aendert eine Datei,
+# die nie kopiert wird -- ohne Fehlermeldung.  Geprueft wird nur das Ziel, also
+# das letzte Argument: aus thusis: nach gdrive: zu kopieren ist der Weg zurueck
+# und erlaubt.
+README="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/README.md"
+if [[ -f "${README}" ]]; then
+    treffer="$(grep -n 'rclone copyto\|rclone copy ' "${README}" \
+        | awk '{ ziel = $NF } ziel ~ /^thusis:/ && ziel ~ /\.json$/ { print }' || true)"
+    pruefe "kein JSON-Ziel in thusis:" "$([[ -z ${treffer} ]] && echo ja || echo nein)" \
+           "${treffer:-Textdateien gehen nur nach gdrive:}"
+else
+    pruefe "README gefunden" "nein" "${README}"
+fi
+
+echo
 if (( FEHLER )); then
     echo "FEHLGESCHLAGEN: ${FEHLER}"
     exit 1

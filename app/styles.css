@@ -77,6 +77,8 @@ body {
   transition: opacity 400ms ease;
 }
 
+.message-layer.interstitial,
+.message-layer.priority,
 .message-layer.quiz_question,
 .message-layer.quiz_answer {
   background: var(--quiz-bg);
@@ -94,11 +96,6 @@ body {
   justify-items: center;
   width: min(1560px, 96vw);
   max-height: 94vh;
-}
-
-.message-layer.interstitial .message-card,
-.message-layer.priority .message-card {
-  animation: messageFloat 18s ease-in-out infinite alternate;
 }
 
 .message-image {
@@ -128,21 +125,20 @@ body {
   text-shadow: 0 5px 24px rgba(0, 0, 0, 0.74);
 }
 
-.message-layer.interstitial .message-text,
-.message-layer.priority .message-text {
-  animation: textGlow 6s ease-in-out infinite alternate;
-}
-
 .message-image:not(.hidden) + .message-text {
   font-size: clamp(42px, 5.9vh, 78px);
   line-height: 1.06;
 }
 
+.message-layer.interstitial:not(.has-image) .message-card,
+.message-layer.priority:not(.has-image) .message-card,
 .message-layer.quiz_question .message-card,
 .message-layer.quiz_answer .message-card {
   width: min(1680px, 96vw);
 }
 
+.message-layer.interstitial:not(.has-image) .message-text,
+.message-layer.priority:not(.has-image) .message-text,
 .message-layer.quiz_question .message-text,
 .message-layer.quiz_answer .message-text {
   max-width: 1620px;
@@ -183,26 +179,4 @@ body {
   margin: 0;
   color: var(--muted);
   font-size: clamp(22px, 3.2vh, 36px);
-}
-
-@keyframes messageFloat {
-  from {
-    transform: translateY(1vh) scale(0.995);
-  }
-
-  to {
-    transform: translateY(-1vh) scale(1.005);
-  }
-}
-
-@keyframes textGlow {
-  from {
-    text-shadow: 0 5px 24px rgba(0, 0, 0, 0.74);
-  }
-
-  to {
-    text-shadow:
-      0 5px 24px rgba(0, 0, 0, 0.74),
-      0 0 24px rgba(255, 249, 239, 0.24);
-  }
 }

@@ -533,7 +533,8 @@ Hinweise:
 - `photo_seconds`: hoeher = ruhigere Slideshow.
 - `interstitial_every_minutes`: niedriger = News/Suggestions erscheinen haeufiger.
 - Quiz wird vollflaechig dunkelblau mit sehr grosser weisser Schrift angezeigt.
-- News/Suggestions bekommen eine sehr ruhige Bewegung, damit das Bild lebendiger wirkt.
+- News/Suggestions werden wie Quiz vollflaechig dunkelblau mit sehr grosser
+  weisser Schrift angezeigt. Das Foto im Hintergrund wird dabei ausgeblendet.
 
 Bei bestehenden Installationen die vorhandene `config.json` in OneDrive anpassen.
 Das Setup ersetzt sie nicht automatisch, damit lokale Einstellungen erhalten bleiben.

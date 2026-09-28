@@ -312,6 +312,7 @@
 
   function hideMessage() {
     els.messageLayer.classList.add("hidden");
+    els.messageLayer.classList.remove("has-image");
     setOverlayMode("");
     els.messageImage.classList.add("hidden");
     els.messageImage.removeAttribute("src");
@@ -325,8 +326,9 @@
     const card = els.messageText.closest(".message-card");
     if (!card) return;
 
-    const isQuiz = ["quiz_question", "quiz_answer"].includes(state.mode);
-    const minFont = isQuiz ? Math.max(58, window.innerHeight * 0.06) : Math.max(48, window.innerHeight * 0.05);
+    const isLargeTextMode = ["quiz_question", "quiz_answer"].includes(state.mode)
+      || (!els.messageLayer.classList.contains("has-image") && ["priority", "interstitial"].includes(state.mode));
+    const minFont = isLargeTextMode ? Math.max(58, window.innerHeight * 0.06) : Math.max(48, window.innerHeight * 0.05);
     let fontSize = Number.parseFloat(window.getComputedStyle(els.messageText).fontSize) || 96;
     const maxHeight = els.messageLayer.clientHeight * 0.9;
     const maxWidth = els.messageLayer.clientWidth * 0.96;
@@ -345,7 +347,10 @@
     state.mode = item.mode || (item.priority ? "priority" : "interstitial");
     setOverlayMode(state.mode);
 
-    if (item.image) {
+    const hasImage = !!item.image;
+    els.messageLayer.classList.toggle("has-image", hasImage);
+
+    if (hasImage) {
       els.messageImage.src = item.image;
       els.messageImage.classList.remove("hidden");
     } else {

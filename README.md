@@ -278,6 +278,9 @@ Wichtig:
 - Gemeinsame Dateien in `common/` muessen mit Mint1/PAC kompatibel bleiben.
 - Neue gemeinsame Textmeldungen verwenden `bubble`, `button_label`, `action`
   und optional `neutral_only`.
+- `neutral_only: true` nur fuer nuechterne Erinnerungen, Termine,
+  medizinische/admin Themen oder technische Hinweise verwenden. Fuer warme,
+  persoenliche oder erfreuliche Meldungen `false` verwenden oder weglassen.
 - Keine Mint2-only Felder wie `variants`, `variants_today`,
   `variants_before`, `importance` oder `event_date` in `common/` einfuehren.
 - Fuer Varietaet mehrere Eintraege mit unterschiedlichen `id` und `bubble`
@@ -498,7 +501,7 @@ gemeinsame PAC-kompatible Format verwenden:
   "bubble": "Am Freitag kommt Judith zu Besuch. Vielleicht geht ihr zusammen spazieren.",
   "button_label": null,
   "action": { "type": "none" },
-  "neutral_only": true
+  "neutral_only": false
 }
 ```
 
@@ -512,7 +515,7 @@ Wenn eine Meldung am Ereignistag anders lauten soll, zwei Eintraege anlegen:
   "bubble": "Heute kommt Judith zu Besuch. Viel Spass zusammen.",
   "button_label": null,
   "action": { "type": "none" },
-  "neutral_only": true
+  "neutral_only": false
 }
 ```
 
@@ -590,7 +593,7 @@ Beispiel `common/news.json`:
       "bubble": "Am Freitag kommt Judith zu Besuch. Vielleicht geht ihr zusammen spazieren.",
       "button_label": null,
       "action": { "type": "none" },
-      "neutral_only": true
+      "neutral_only": false
     },
     {
       "id": "judith_besuch_heute_2026_10_02",
@@ -599,7 +602,7 @@ Beispiel `common/news.json`:
       "bubble": "Heute kommt Judith zu Besuch. Viel Spass zusammen.",
       "button_label": null,
       "action": { "type": "none" },
-      "neutral_only": true
+      "neutral_only": false
     }
   ]
 }

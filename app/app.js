@@ -112,12 +112,54 @@
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
 
+  function timeToMinutes(value) {
+    if (!value || typeof value !== "string") return null;
+    const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+    if (!match) return null;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return hour * 60 + minute;
+  }
+
+  function isInTimeWindow(item, now) {
+    const rules = item.rules && typeof item.rules === "object" ? item.rules : {};
+    const after = timeToMinutes(item.after_time || rules.after_time);
+    const before = timeToMinutes(item.before_time || rules.before_time);
+    if (after === null && before === null) return true;
+
+    const current = now.getHours() * 60 + now.getMinutes();
+    if (after !== null && before !== null && before < after) {
+      return current >= after || current <= before;
+    }
+    if (after !== null && current < after) return false;
+    if (before !== null && current > before) return false;
+    return true;
+  }
+
+  function isRecurringActive(item, now) {
+    const type = String(item.type || "").toLowerCase();
+    if (!["weekly", "daily", "annual"].includes(type)) return true;
+    if (!isInTimeWindow(item, now)) return false;
+
+    if (type === "daily") return true;
+
+    if (type === "weekly") {
+      const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      return String(item.day_of_week || "").toLowerCase() === weekdays[now.getDay()];
+    }
+
+    const month = Number(item.month);
+    const day = Number(item.day);
+    return month === now.getMonth() + 1 && day === now.getDate();
+  }
+
   function isActive(item, now) {
     const from = parseLocalDate(item.valid_from, false);
     const until = parseLocalDate(item.valid_until, true);
     if (from && now < from) return false;
     if (until && now > until) return false;
-    return true;
+    return isInTimeWindow(item, now) && isRecurringActive(item, now);
   }
 
   function normalizeInfoImage(image) {
@@ -171,6 +213,7 @@
   function messageBucket(item, now) {
     if (item.priority) return "priority";
     if (messageImportance(item) === "filler") return "filler";
+    if (["weekly", "daily", "annual"].includes(String(item.type || "").toLowerCase())) return "today_news";
     const timing = eventTiming(item, now);
     if (timing === "today") return "today_news";
     if (timing === "before") return "upcoming_news";

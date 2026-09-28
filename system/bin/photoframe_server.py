@@ -2,7 +2,8 @@
 """Local HTTP server for the photo frame web app.
 
 The browser talks to 127.0.0.1 only. Private photos and message files are read
-from FRAME_DATA_DIR, normally a local rclone mirror of OneDrive/Fotoframe.
+from FRAME_DATA_DIR, normally a local rclone copy of Thusis OneDrive
+KioskContent/{common,mint2}.
 """
 
 from __future__ import annotations
@@ -29,6 +30,8 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 APP_DIR = ROOT_DIR / "app"
 EXAMPLES_DIR = ROOT_DIR / "examples"
 DATA_DIR = Path(os.environ.get("FRAME_DATA_DIR", str(Path.home() / "frame-data"))).expanduser()
+COMMON_DIR = DATA_DIR / "common"
+MINT2_DIR = DATA_DIR / "mint2"
 PORT = int(os.environ.get("PHOTOFRAME_PORT", "8765"))
 
 PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
@@ -76,8 +79,38 @@ def load_json_file(path: Path, fallback: dict) -> dict:
         return fallback
 
 
-def list_photos() -> list[dict]:
-    photo_dir = DATA_DIR / "photos"
+def json_items(path: Path) -> list[dict]:
+    doc = load_json_file(path, {"schema_version": 1, "items": []})
+    items = doc.get("items")
+    return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+
+def merged_news() -> dict:
+    common_paths = [
+        (COMMON_DIR / "news.json", "news"),
+        (COMMON_DIR / "recurring.json", "news"),
+        (COMMON_DIR / "suggestions.json", "filler"),
+    ]
+    common_exists = any(path.exists() for path, _ in common_paths)
+    sources = common_paths if common_exists else [(DATA_DIR / "news.json", "news")]
+
+    items: list[dict] = []
+    for path, default_importance in sources:
+        for item in json_items(path):
+            normalized = dict(item)
+            normalized.setdefault("importance", default_importance)
+            items.append(normalized)
+    return {"schema_version": 2, "items": items}
+
+
+def first_json(candidates: list[Path], fallback: dict) -> dict:
+    for path in candidates:
+        if path.exists():
+            return load_json_file(path, fallback)
+    return fallback
+
+
+def list_photos_in(photo_dir: Path) -> list[dict]:
     if not photo_dir.exists():
         return []
     items = []
@@ -99,18 +132,42 @@ def list_photos() -> list[dict]:
     return items
 
 
+def list_photos() -> list[dict]:
+    for photo_dir in (MINT2_DIR / "photos", DATA_DIR / "photos"):
+        items = list_photos_in(photo_dir)
+        if items:
+            return items
+    return []
+
+
+def send_first_existing(handler: BaseHTTPRequestHandler, roots: list[Path], rel: str) -> None:
+    for root in roots:
+        target = safe_join(root, rel)
+        if target and target.exists():
+            handler.send_file(target)
+            return
+    handler.send_error(HTTPStatus.NOT_FOUND)
+
+
 def content_payload() -> dict:
     config = {**DEFAULT_CONFIG}
     config.update(load_json_file(EXAMPLES_DIR / "config.json", {}))
     config.update(load_json_file(DATA_DIR / "config.json", {}))
+    config.update(load_json_file(MINT2_DIR / "config.json", {}))
     return {
         "generated_at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
         "data_dir": str(DATA_DIR),
         "config": config,
         "photos": list_photos(),
-        "news": load_json_file(DATA_DIR / "news.json", {"schema_version": 1, "items": []}),
-        "info_images": load_json_file(DATA_DIR / "info-images.json", {"schema_version": 1, "items": []}),
-        "quiz": load_json_file(DATA_DIR / "quiz.json", load_json_file(EXAMPLES_DIR / "quiz.json", {"schema_version": 1, "items": []})),
+        "news": merged_news(),
+        "info_images": first_json(
+            [MINT2_DIR / "info-images.json", DATA_DIR / "info-images.json"],
+            {"schema_version": 1, "items": []},
+        ),
+        "quiz": first_json(
+            [MINT2_DIR / "quiz.json", DATA_DIR / "quiz.json"],
+            load_json_file(EXAMPLES_DIR / "quiz.json", {"schema_version": 1, "items": []}),
+        ),
     }
 
 
@@ -162,13 +219,11 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/data/photos/"):
-            target = safe_join(DATA_DIR / "photos", path.removeprefix("/data/photos/"))
-            self.send_file(target) if target else self.send_error(HTTPStatus.FORBIDDEN)
+            send_first_existing(self, [MINT2_DIR / "photos", DATA_DIR / "photos"], path.removeprefix("/data/photos/"))
             return
 
         if path.startswith("/data/info/"):
-            target = safe_join(DATA_DIR / "info", path.removeprefix("/data/info/"))
-            self.send_file(target) if target else self.send_error(HTTPStatus.FORBIDDEN)
+            send_first_existing(self, [MINT2_DIR / "info", DATA_DIR / "info"], path.removeprefix("/data/info/"))
             return
 
         rel = "index.html" if path in {"/", ""} else path.lstrip("/")
@@ -178,9 +233,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> int:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    (DATA_DIR / "photos").mkdir(parents=True, exist_ok=True)
-    (DATA_DIR / "info").mkdir(parents=True, exist_ok=True)
-    (DATA_DIR / "command").mkdir(parents=True, exist_ok=True)
+    COMMON_DIR.mkdir(parents=True, exist_ok=True)
+    (MINT2_DIR / "photos").mkdir(parents=True, exist_ok=True)
+    (MINT2_DIR / "info").mkdir(parents=True, exist_ok=True)
+    (MINT2_DIR / "command").mkdir(parents=True, exist_ok=True)
 
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     LOG.info("photoframe server starting on http://127.0.0.1:%d/ data=%s", PORT, DATA_DIR)

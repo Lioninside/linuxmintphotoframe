@@ -79,22 +79,30 @@ else
 fi
 
 photo_count=0
-if [[ -d "${FRAME_DATA_DIR}/photos" ]]; then
+photo_dir="${FRAME_DATA_DIR}/mint2/photos"
+if [[ -d "${photo_dir}" ]]; then
+    photo_count="$(find "${photo_dir}" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.bmp' \) | wc -l)"
+fi
+if (( photo_count == 0 )) && [[ -d "${FRAME_DATA_DIR}/photos" ]]; then
     photo_count="$(find "${FRAME_DATA_DIR}/photos" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.bmp' \) | wc -l)"
 fi
 if (( photo_count > 0 )); then
     ok "Photos found: ${photo_count}"
 else
-    warn "No photos found yet in ${FRAME_DATA_DIR}/photos"
+    warn "No photos found yet in ${FRAME_DATA_DIR}/mint2/photos"
 fi
 
-for f in config.json news.json info-images.json quiz.json; do
+for f in common/news.json common/suggestions.json common/recurring.json mint2/config.json mint2/info-images.json mint2/quiz.json; do
     if [[ -f "${FRAME_DATA_DIR}/${f}" ]]; then
         ok "${f} present"
     else
         warn "${f} missing"
     fi
 done
+
+if [[ -f "${FRAME_DATA_DIR}/news.json" ]]; then
+    info "Legacy root news.json present; used only if common/*.json is missing"
+fi
 
 printf "\n%sStorage%s\n" "${BOLD}" "${RESET}"
 if [[ -d "${FRAME_DATA_DIR}" ]]; then
@@ -111,7 +119,7 @@ if [[ -d "${FRAME_DATA_DIR}" ]]; then
     else
         warn "Could not determine free disk space"
     fi
-    for path in "${FRAME_DATA_DIR}" "${FRAME_DATA_DIR}/photos" "${STATE_DIR}"; do
+    for path in "${FRAME_DATA_DIR}" "${FRAME_DATA_DIR}/common" "${FRAME_DATA_DIR}/mint2/photos" "${STATE_DIR}"; do
         size="$(human_du "${path}")"
         [[ -n "${size}" ]] && info "${size}"
     done

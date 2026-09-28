@@ -86,7 +86,7 @@ write_env_if_missing() {
     cat > "${ENV_FILE}" <<ENV_EOF
 # Linux Mint Photo Frame Kiosk
 FRAME_DATA_DIR=${HOME}/frame-data
-RCLONE_SOURCE=onedrive:Fotoframe
+RCLONE_SOURCE=thusis:KioskContent
 PHOTOFRAME_PORT=8765
 
 # Optional display reset. Leave empty until xrandr output/mode are known.
@@ -106,12 +106,20 @@ seed_data_files() {
     # shellcheck disable=SC1090
     source "${ENV_FILE}"
     FRAME_DATA_DIR="${FRAME_DATA_DIR:-${HOME}/frame-data}"
-    mkdir -p "${FRAME_DATA_DIR}/photos" "${FRAME_DATA_DIR}/info" "${FRAME_DATA_DIR}/command"
+    mkdir -p "${FRAME_DATA_DIR}/common" \
+        "${FRAME_DATA_DIR}/mint2/photos" \
+        "${FRAME_DATA_DIR}/mint2/info" \
+        "${FRAME_DATA_DIR}/mint2/command"
 
-    for name in config.json news.json info-images.json quiz.json; do
-        if [[ ! -f "${FRAME_DATA_DIR}/${name}" && -f "${INSTALL_DIR}/examples/${name}" ]]; then
-            cp "${INSTALL_DIR}/examples/${name}" "${FRAME_DATA_DIR}/${name}"
-            ok "Seeded ${FRAME_DATA_DIR}/${name}"
+    if [[ ! -f "${FRAME_DATA_DIR}/common/news.json" && -f "${INSTALL_DIR}/examples/news.json" ]]; then
+        cp "${INSTALL_DIR}/examples/news.json" "${FRAME_DATA_DIR}/common/news.json"
+        ok "Seeded ${FRAME_DATA_DIR}/common/news.json"
+    fi
+
+    for name in config.json info-images.json quiz.json; do
+        if [[ ! -f "${FRAME_DATA_DIR}/mint2/${name}" && -f "${INSTALL_DIR}/examples/${name}" ]]; then
+            cp "${INSTALL_DIR}/examples/${name}" "${FRAME_DATA_DIR}/mint2/${name}"
+            ok "Seeded ${FRAME_DATA_DIR}/mint2/${name}"
         fi
     done
 }

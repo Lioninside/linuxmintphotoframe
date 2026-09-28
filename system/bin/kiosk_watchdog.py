@@ -22,7 +22,10 @@ DISPLAY_OUTPUT = os.environ.get("DISPLAY_OUTPUT", "").strip()
 DISPLAY_MODE = os.environ.get("DISPLAY_MODE", "").strip()
 
 LOOP_INTERVAL = 30
-REBOOT_FILE = FRAME_DATA_DIR / "command" / "neustart.txt"
+REBOOT_FILES = [
+    FRAME_DATA_DIR / "mint2" / "command" / "neustart.txt",
+    FRAME_DATA_DIR / "command" / "neustart.txt",
+]
 REBOOT_STAMP_FILE = kiosk_common.STATE_DIR / "neustart_zuletzt.txt"
 REBOOT_MAX_LEN = 200
 
@@ -111,12 +114,19 @@ def _do_reboot() -> bool:
 
 
 def _check_reboot_file() -> None:
+    reboot_file = None
     try:
-        mark = REBOOT_FILE.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        return
+        for candidate in REBOOT_FILES:
+            try:
+                mark = candidate.read_text(encoding="utf-8").strip()
+                reboot_file = candidate
+                break
+            except FileNotFoundError:
+                continue
+        else:
+            return
     except OSError as exc:
-        LOG.warning("Cannot read reboot file %s: %r", REBOOT_FILE, exc)
+        LOG.warning("Cannot read reboot file %s: %r", reboot_file or REBOOT_FILES[0], exc)
         return
 
     if not mark or len(mark) > REBOOT_MAX_LEN:

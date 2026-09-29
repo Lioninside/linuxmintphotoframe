@@ -723,31 +723,83 @@ als Fallback. Neue Eintraege in `common/` sollten aber bewusst beim gemeinsamen
 
 ## Info-Bilder
 
-Beispiel `mint2/info-images.json`:
+Ein Infobild ist ein PNG, das der Rahmen statt eines Fotos zeigt. Es besteht
+immer aus **zwei Haelften in zwei Clouds**: der Liste
+`mint2/info-images.json` in Google Drive und der Bilddatei unter
+`mint2/info/` in OneDrive. Im Feld `image` steht nur der Dateiname. Fehlt eine
+Haelfte, passiert nichts — wortlos.
+
+### Ohne caption laeuft das Bild formatfuellend
+
+Steht der Text schon im Bild, lass `caption` weg. Dann fuellt das PNG den
+ganzen Schirm.
+
+Mit caption bleibt es eine Karte in der Mitte: `max-width: 1240px`,
+`max-height: 66vh`. Ein 1920x1080-PNG landet damit bei 1240x698 — 65 % der
+Breite, und der Text im Bild schrumpft mit. Die vom Rahmen gerenderte caption
+dagegen laeuft mit rund 140 px ueber die volle Breite.
+
+Faustregel: **Text im Bild → keine caption. Bild rein bildlich → caption.**
+Beides zusammen ist moeglich, macht den Text im Bild aber klein.
+
+Laedt der Rahmen ein Bild nicht (Tippfehler im Namen, PNG noch nicht
+synchronisiert), ueberspringt er den Eintrag und zeigt weiter Fotos. Ohne
+caption waere es sonst ein schwarzer Bildschirm, bei `priority` so lange wie
+der Eintrag gilt.
+
+### Wochentage und Uhrzeiten
+
+Infobilder verstehen dieselben Wiederholungsregeln wie `recurring.json`:
+`type` `weekly` mit `day_of_week`, `daily`, oder `annual` mit `month`/`day`.
+Dazu `after_time`/`before_time`; ein Fenster ueber Mitternacht
+(`22:00`–`01:00`) ist erlaubt.
+
+Alternativ ein einmaliger Termin ueber `valid_from`/`valid_until`, hier auch
+mit Uhrzeit (`2026-09-25T08:00:00`) — diese Datei liest nur der Rahmen, der
+Datum plus Zeit korrekt auswertet. In der geteilten `common/news.json` gilt
+das **nicht**, siehe CLAUDE.md im PAC-Repo.
+
+### priority ist ein Schalter, kein Regler
+
+`false` — das Bild reiht sich in den normalen Takt ein, zwischendurch laufen
+Fotos weiter. `every_minutes` setzt eine Mindestpause fuer diesen Eintrag,
+`duration_sec` die Standzeit.
+
+`true` — der Rahmen zeigt **nichts anderes mehr**: keine Fotos, kein Quiz,
+keine Livecam, nur die Prioritaets-Eintraege im Wechsel alle
+`priority_rotation_seconds`. Das ist ein Anschlagbrett. Ohne enges Zeitfenster
+sieht die Benutzerin nie wieder ein Foto, und am Bildschirm sieht das nicht
+nach einem Fehler aus.
+
+### Der aktuelle Stand
 
 ```json
 {
-  "schema_version": 1,
-  "items": [
-    {
-      "id": "arzttermin",
-      "image": "arzttermin.png",
-      "caption": "Heute Nachmittag kommt Claudia vorbei.",
-      "valid_from": "2026-09-25T08:00:00",
-      "valid_until": "2026-09-25T12:00:00",
-      "priority": false,
-      "every_minutes": 10,
-      "duration_sec": 30
-    }
-  ]
+  "id": "pommes_freitag",
+  "_text": "Heute gibt es Pommes Frites.",
+  "image": "pommes.png",
+  "type": "weekly",
+  "day_of_week": "friday",
+  "after_time": "15:00",
+  "before_time": "19:00",
+  "priority": false,
+  "every_minutes": 60,
+  "duration_sec": 30
 }
 ```
 
-Die Datei `arzttermin.png` liegt dann unter:
+`_text` wertet der Rahmen nicht aus. Es steht dort, weil ohne caption sonst
+niemand sieht, was auf dem Bild steht, ohne es zu oeffnen.
 
-```text
-mint2/info/arzttermin.png
-```
+Eingerichtet sind fuenf:
+
+| Bild | Wann | priority |
+|---|---|---|
+| `reinigung.png` | Fr 09:00–11:00 | false, alle 20 Min. |
+| `einkaufsspitex.png` | Mo 13:00–14:00 | **true** |
+| `pommes.png` | Fr 15:00–19:00 | false, stuendlich |
+| `katzenfutter.png` | taeglich 17:00–21:00 | false, stuendlich |
+| `gute_nacht.png` | taeglich 22:00–01:00 | **true** |
 
 ## Anzeige-Tuning
 

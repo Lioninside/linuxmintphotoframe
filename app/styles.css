@@ -111,6 +111,37 @@ body {
   display: none;
 }
 
+/* Ein Infobild, das seinen Text selbst traegt, laeuft formatfuellend.
+ *
+ * Als Karte gerendert lief ein 1920x1080-PNG auf 1240x698 zusammen, also
+ * 65 % der Bildschirmbreite -- und der Text im Bild schrumpfte mit. Fuer
+ * eine sehbehinderte Betrachterin ist das der Unterschied zwischen lesbar
+ * und nicht.
+ *
+ * Nur bei .image-only: kommt zum Bild eine Caption, bleibt es die Karte mit
+ * Text darunter, sonst faende der Text keinen Platz mehr. Die Klasse setzt
+ * showMessage() in app.js.
+ */
+.message-layer.image-only {
+  padding: 0;
+}
+
+.message-layer.image-only .message-card {
+  width: 100%;
+  max-height: 100vh;
+  gap: 0;
+}
+
+.message-layer.image-only .message-image {
+  width: 100%;
+  height: 100vh;
+  max-width: 100%;
+  max-height: 100vh;
+  object-fit: contain;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .message-text {
   width: 100%;
   max-width: 1500px;

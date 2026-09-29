@@ -239,8 +239,17 @@
     };
   }
 
+  // Bilder, die der Browser nicht laden konnte -- falscher Dateiname, PNG noch
+  // nicht auf OneDrive, Sync unterwegs. Ohne diese Liste zeigte der Rahmen bei
+  // einem priority-Eintrag ohne Caption einen schwarzen Bildschirm, und zwar
+  // so lange, wie der Eintrag gilt. Bei "gute Nacht" waeren das drei Stunden
+  // ohne jeden Hinweis, was los ist. Einmal gescheitert heisst: bis zum
+  // naechsten Neuladen uebersprungen, der Rahmen zeigt weiter Fotos.
+  const brokenImages = new Set();
+
   function normalizeImageItem(item, now) {
     const image = normalizeInfoImage(item.image);
+    if (image && brokenImages.has(image)) return null;
     const variants = stringList(item.caption_variants, item.variants, item.caption, item.text);
     if (!image && !variants.length) return null;
     const id = item.id || item.image || variants[0];
@@ -355,7 +364,7 @@
 
   function hideMessage() {
     els.messageLayer.classList.add("hidden");
-    els.messageLayer.classList.remove("has-image");
+    els.messageLayer.classList.remove("has-image", "image-only");
     setOverlayMode("");
     els.messageImage.classList.add("hidden");
     els.messageImage.removeAttribute("src");
@@ -391,7 +400,12 @@
     setOverlayMode(state.mode);
 
     const hasImage = !!item.image;
+    // Ein Infobild, das seinen Text selbst traegt, wird formatfuellend
+    // gezeigt (siehe .image-only in styles.css). Mit Caption bleibt es die
+    // Karte mit Text darunter -- sonst faende der Text keinen Platz mehr.
+    const text = item.text || pickVariant(item);
     els.messageLayer.classList.toggle("has-image", hasImage);
+    els.messageLayer.classList.toggle("image-only", hasImage && !text);
 
     if (hasImage) {
       els.messageImage.src = item.image;
@@ -402,7 +416,7 @@
     }
 
     els.messageText.style.fontSize = "";
-    els.messageText.textContent = item.text || pickVariant(item);
+    els.messageText.textContent = text;
     els.messageLayer.classList.remove("hidden");
     window.requestAnimationFrame(fitMessageText);
     state.messageVisibleUntil = Date.now() + seconds(item.duration_sec, fallbackDurationMs / 1000);
@@ -613,6 +627,14 @@
       showMessage(item, seconds(state.config.interstitial_duration_seconds, DEFAULT_CONFIG.interstitial_duration_seconds));
     }
   }
+
+  els.messageImage.addEventListener("error", () => {
+    const src = els.messageImage.getAttribute("src");
+    if (!src) return;
+    brokenImages.add(src);
+    console.warn(`Infobild nicht ladbar, wird uebersprungen: ${src}`);
+    hideMessage();
+  });
 
   async function start() {
     await loadContent();

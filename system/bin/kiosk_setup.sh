@@ -140,11 +140,26 @@ install_systemd_units() {
     cp "${INSTALL_DIR}/system/systemd/"*.service "${SYSTEMD_USER_DIR}/"
     cp "${INSTALL_DIR}/system/systemd/"*.timer "${SYSTEMD_USER_DIR}/"
     systemctl --user daemon-reload
-    systemctl --user enable --now linuxmintphotoframe-server.service
-    systemctl --user enable --now linuxmintphotoframe-sync.timer
-    systemctl --user enable --now linuxmintphotoframe-browser.service
-    systemctl --user enable --now linuxmintphotoframe-watchdog.service
-    ok "Enabled and started user services"
+
+    # enable, dann restart -- nicht `enable --now`.
+    #
+    # `--now` startet einen Dienst nur, wenn er noch nicht laeuft. Auf einer
+    # bestehenden Installation laeuft er aber, und dann behielten Watchdog und
+    # Server ihren alten Python-Code, obwohl die Dateien schon ersetzt waren.
+    # Das Setup meldete Erfolg, und geaendert hatte sich nichts. Am 29.09.2026
+    # kam so ein Update-Ausloeser nie zum Zug: die Datei lag lokal, aber der
+    # laufende Watchdog kannte sie gar nicht.
+    #
+    # Der Browser gehoert dazu: Firefox liest app.js und styles.css beim
+    # Seitenstart. Ohne Neustart zeigt er die alte Oberflaeche weiter.
+    for unit in linuxmintphotoframe-server.service \
+                linuxmintphotoframe-sync.timer \
+                linuxmintphotoframe-browser.service \
+                linuxmintphotoframe-watchdog.service; do
+        systemctl --user enable "${unit}" >/dev/null 2>&1 || true
+        systemctl --user restart "${unit}"
+    done
+    ok "Enabled and restarted user services"
 }
 
 install_user_commands() {

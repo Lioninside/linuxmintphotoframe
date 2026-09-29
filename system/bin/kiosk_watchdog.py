@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
 import subprocess
 import time
@@ -45,6 +46,18 @@ UPDATE_FILES = [
 ]
 UPDATE_STAMP_FILE = kiosk_common.STATE_DIR / "update_zuletzt.txt"
 UPDATE_SCRIPT = Path(__file__).resolve().parent / "photoframe_selfupdate.sh"
+
+# Dieselbe Sperrdatei, die photoframe_selfupdate.sh haelt, solange es
+# arbeitet. Sie beantwortet die Frage "laeuft gerade ein Deploy?" -- und damit
+# ein Rennen: der Neustart darf nicht mitten in eine Installation fallen.
+UPDATE_LOCK_FILE = kiosk_common.STATE_DIR / "photoframe-selfupdate.lock"
+
+# ...aber nicht unbegrenzt. Der Neustart ist der Notweg; haengt ein Deploy,
+# darf es ihn nicht auf Dauer verstellen.
+UPDATE_WAIT_MAX_SEC = 600
+
+# Seit wann ein laufendes Update den Neustart zurueckhaelt. 0 = kein Update.
+_update_wartet_seit = 0.0
 
 
 def _run(cmd: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
@@ -178,6 +191,24 @@ def _new_mark(candidates: list[Path], stamp_file: Path, what: str) -> str | None
     return mark
 
 
+def _update_laeuft() -> bool:
+    """True, solange photoframe_selfupdate.sh seine Sperrdatei haelt.
+
+    Nicht-blockierend: Sperre versuchen und sofort wieder hergeben. Gelingt
+    sie nicht, arbeitet gerade ein Deploy.
+    """
+    try:
+        with open(UPDATE_LOCK_FILE, "a") as fh:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                return True
+            fcntl.flock(fh, fcntl.LOCK_UN)
+    except OSError:
+        return False
+    return False
+
+
 def _do_update() -> bool:
     """Das Selbstupdate anstossen. True, wenn es gestartet werden konnte.
 
@@ -206,9 +237,33 @@ def _check_command_files() -> None:
 
     Liegt beides gleichzeitig an, soll erst der neue Stand ausgerollt und dann
     neu gestartet werden, nicht umgekehrt.
+
+    Die blosse Reihenfolge genuegt dafuer nicht. Das Deploy laeuft abgekoppelt
+    weiter, waehrend diese Funktion schon zurueckkommt -- ein Neustart direkt
+    danach fiele also mitten in die Installation. Solange das Deploy seine
+    Sperrdatei haelt, wird die Neustart-Marke deshalb gar nicht erst gelesen;
+    sie bleibt liegen und greift beim naechsten Durchlauf. Nach
+    UPDATE_WAIT_MAX_SEC gewinnt der Neustart trotzdem: er ist der Notweg.
     """
+    global _update_wartet_seit
+    now = time.time()
+
     if _new_mark(UPDATE_FILES, UPDATE_STAMP_FILE, "update"):
         _do_update()
+        _update_wartet_seit = now
+        return
+
+    if _update_laeuft():
+        if not _update_wartet_seit:
+            _update_wartet_seit = now
+        gewartet = now - _update_wartet_seit
+        if gewartet < UPDATE_WAIT_MAX_SEC:
+            LOG.info("Update running for %ds — reboot mark left unread", int(gewartet))
+            return
+        LOG.warning("Update running for %ds and blocking the emergency path — "
+                    "reading the reboot mark anyway", int(gewartet))
+    else:
+        _update_wartet_seit = 0.0
 
     if _new_mark(REBOOT_FILES, REBOOT_STAMP_FILE, "reboot"):
         if not _do_reboot():

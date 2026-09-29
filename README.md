@@ -909,8 +909,16 @@ Chat ausloesen.
 
 Alles landet in `~/state/kiosk.log`, die Details in `~/state/selfupdate.log`.
 
-Liegen beide Marken gleichzeitig neu an, laeuft erst das Update und dann der
-Neustart — sonst startet der Rahmen neu, bevor der neue Stand liegt.
+Liegen beide Marken gleichzeitig neu an, **wartet der Neustart auf das
+Deploy**. Die zwei Aufrufe zu ordnen genuegt dafuer nicht: das Deploy laeuft
+abgekoppelt weiter, ein Neustart direkt danach faellt also mitten in die
+Installation. Solange `photoframe_selfupdate.sh` seine Sperrdatei haelt, wird
+die Neustart-Marke darum gar nicht erst gelesen; sie bleibt liegen und greift
+beim naechsten Durchlauf.
+
+Nach `UPDATE_WAIT_MAX_SEC` (600 s, in `kiosk_watchdog.py`) gewinnt der Neustart
+trotzdem, mit einer WARN-Zeile. Er ist der letzte Weg in die Maschine, und ein
+haengendes Deploy darf ihn nicht auf Dauer verstellen.
 
 Von Hand, ohne auf den Sync zu warten:
 

@@ -139,6 +139,12 @@ cd linuxmintphotoframe
 bash system/bin/kiosk_setup.sh
 ```
 
+Das Setup startet Server, Watchdog, Browser und Sync-Timer danach **neu**,
+nicht nur `enable --now`. Ohne das behielten die langlaufenden Dienste ihren
+alten Code, obwohl die Dateien schon ersetzt waren — das Setup meldete Erfolg,
+und auf dem Schirm aenderte sich nichts. Firefox gehoert dazu: er liest
+`app.js` und `styles.css` beim Seitenstart.
+
 Das Setup behaelt `~/.config/linuxmintphotoframe/env` bei. Die Cloud-Konfiguration,
 lokale Daten unter `~/frame-data` und die rclone-Anmeldung bleiben erhalten.
 

@@ -32,6 +32,7 @@
 
   const state = {
     config: { ...DEFAULT_CONFIG },
+    appVersion: "",
     photos: [],
     news: [],
     infoImages: [],
@@ -243,14 +244,22 @@
   // nicht auf OneDrive, Sync unterwegs. Ohne diese Liste zeigte der Rahmen bei
   // einem priority-Eintrag ohne Caption einen schwarzen Bildschirm, und zwar
   // so lange, wie der Eintrag gilt. Bei "gute Nacht" waeren das drei Stunden
-  // ohne jeden Hinweis, was los ist. Einmal gescheitert heisst: bis zum
-  // naechsten Neuladen uebersprungen, der Rahmen zeigt weiter Fotos.
+  // ohne jeden Hinweis, was los ist.
+  //
+  // Die Liste wird bei jedem loadContent() geleert. Der haeufigste Grund fuer
+  // ein fehlendes Bild ist ein Sync, der noch laeuft -- das PNG ist zwei
+  // Minuten spaeter da. Ohne das Leeren bliebe es bis zum naechsten
+  // Browser-Neustart uebersprungen, also unter Umstaenden wochenlang.
   const brokenImages = new Set();
 
   function normalizeImageItem(item, now) {
-    const image = normalizeInfoImage(item.image);
-    if (image && brokenImages.has(image)) return null;
+    let image = normalizeInfoImage(item.image);
     const variants = stringList(item.caption_variants, item.variants, item.caption, item.text);
+    // Bild kaputt, aber Text da: den Text zeigen. "Heute kommt die Reinigung"
+    // stimmt als Satz weiterhin, wenn bloss das PNG fehlt -- den ganzen
+    // Eintrag fallenzulassen wuerde die Nachricht wegwerfen, nicht nur das
+    // Bild. Erst wenn beides fehlt, gibt es nichts mehr zu zeigen.
+    if (image && brokenImages.has(image)) image = "";
     if (!image && !variants.length) return null;
     const id = item.id || item.image || variants[0];
     return {
@@ -582,6 +591,24 @@
 
   async function loadContent() {
     const data = await fetchJSON("/api/content", {});
+
+    // Hat sich die ausgelieferte Oberflaeche geaendert, laedt die Seite sich
+    // selbst neu. Firefox laeuft hier ausserhalb jeder systemd-Unit, ein
+    // Dienste-Neustart nach einem Selbstupdate erreicht ihn also nicht -- ohne
+    // das hier zeigte der Rahmen die alte app.js weiter, bis jemand den
+    // Rechner neu startet. Siehe app_version() in photoframe_server.py.
+    if (data.app_version) {
+      if (state.appVersion && state.appVersion !== data.app_version) {
+        console.warn(`Neue Oberflaeche (${data.app_version}), lade neu`);
+        window.location.reload();
+        return;
+      }
+      state.appVersion = data.app_version;
+    }
+
+    // Neuer Inhalt, neue Chance: ein Bild, das vorhin fehlte, ist vielleicht
+    // inzwischen synchronisiert.
+    brokenImages.clear();
     state.config = { ...DEFAULT_CONFIG, ...(data.config || {}) };
     state.photos = Array.isArray(data.photos) ? data.photos : [];
     state.news = Array.isArray(data.news?.items) ? data.news.items : [];
@@ -632,6 +659,19 @@
     const src = els.messageImage.getAttribute("src");
     if (!src) return;
     brokenImages.add(src);
+
+    // Steht schon Text auf dem Schirm, bleibt der stehen -- nur das Bild
+    // verschwindet. Die Nachricht ist ohne ihr Bild immer noch die
+    // Nachricht; sie hier wegzuraeumen hiesse, sie zweimal zu verlieren.
+    if (els.messageText.textContent.trim()) {
+      console.warn(`Infobild nicht ladbar, zeige nur den Text: ${src}`);
+      els.messageLayer.classList.remove("has-image", "image-only");
+      els.messageImage.classList.add("hidden");
+      els.messageImage.removeAttribute("src");
+      window.requestAnimationFrame(fitMessageText);
+      return;
+    }
+
     console.warn(`Infobild nicht ladbar, wird uebersprungen: ${src}`);
     hideMessage();
   });

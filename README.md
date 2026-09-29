@@ -743,9 +743,16 @@ Faustregel: **Text im Bild → keine caption. Bild rein bildlich → caption.**
 Beides zusammen ist moeglich, macht den Text im Bild aber klein.
 
 Laedt der Rahmen ein Bild nicht (Tippfehler im Namen, PNG noch nicht
-synchronisiert), ueberspringt er den Eintrag und zeigt weiter Fotos. Ohne
-caption waere es sonst ein schwarzer Bildschirm, bei `priority` so lange wie
-der Eintrag gilt.
+synchronisiert), faellt nur das Bild weg: gibt es eine caption, zeigt er den
+Text allein — "Heute kommt die Reinigung" stimmt als Satz weiterhin. Erst wenn
+beides fehlt, ueberspringt er den Eintrag und zeigt weiter Fotos. Ohne caption
+waere es sonst ein schwarzer Bildschirm, bei `priority` so lange wie der
+Eintrag gilt.
+
+Ein einmal gescheitertes Bild bleibt nur bis zum naechsten Inhaltsabruf
+uebersprungen (`content_reload_seconds`), nicht bis zum Browser-Neustart —
+der haeufigste Grund ist ein Sync, der noch laeuft, und der ist zwei Minuten
+spaeter durch.
 
 ### Wochentage und Uhrzeiten
 
@@ -956,16 +963,58 @@ Chat ausloesen.
 
 **Was das Update tut**, in `photoframe_selfupdate.sh`:
 
-1. Sich selbst abgekoppelt neu starten (`setsid`). `kiosk_setup.sh` startet die
-   User-Dienste neu, darunter den Watchdog — ein Deploy als dessen Kind stirbt
-   mitten drin.
+1. Sich selbst aus einer `/tmp`-Kopie in einer **eigenen transienten Unit**
+   neu starten (`systemd-run --user`). Zwei getrennte Gruende, siehe unten.
 2. Frisch nach `/tmp` klonen. `~/linuxmintphotoframe` ist kein Checkout, hier
    gibt es kein `git pull`.
-3. `test_sync.sh` im Klon laufen lassen. Schlaegt er fehl, wird nichts
-   ausgerollt — die laufende Installation bleibt unberuehrt.
-4. Erst dann `kiosk_setup.sh` aus dem Klon.
+3. `test_sync.sh` und `test_fernbefehle.py` im Klon laufen lassen. Schlaegt
+   einer fehl, wird nichts ausgerollt — die laufende Installation bleibt
+   unberuehrt.
+4. Erst dann `kiosk_setup.sh` aus dem Klon, und ganz zuletzt der Watchdog.
 
 Alles landet in `~/state/kiosk.log`, die Details in `~/state/selfupdate.log`.
+
+**Warum eine eigene Unit und nicht bloss `setsid`.** `kiosk_setup.sh` startet
+die User-Dienste neu, darunter den Watchdog — und der Watchdog hat das Deploy
+gestartet. `systemctl restart` raeumt die **ganze Cgroup** der Unit ab,
+`KillMode` steht per Voreinstellung auf `control-group`. `setsid` loest die
+Prozessgruppe, nicht die Cgroup; ein `setsid`-Kind des Watchdogs stirbt also
+mitten in der Installation: kein Log, kein `frame-version.txt`, ein
+`/tmp`-Klon, den niemand wegraeumt, und beim naechsten Versuch faengt alles von
+vorn an. Von Hand gestartet faellt das nie auf — dann haengt das Deploy an der
+Login-Session. Der Fehler griff **nur** auf dem Weg, fuer den das Skript da
+ist. `systemd-run --user` gibt ihm eine eigene Cgroup, die das ueberlebt. Als
+zweiter Riegel setzt `photoframe_selfupdate.sh`
+`FRAME_SETUP_WATCHDOG_RESTART=defer`; `kiosk_setup.sh` laesst den Watchdog dann
+aus, und das Skript startet ihn selbst, sobald das Setup durch ist. Von Hand
+aufgerufen ist die Variable leer und alles laeuft wie bisher.
+
+Die `/tmp`-Kopie ist der zweite, davon unabhaengige Grund: `kiosk_setup.sh`
+spielt den ganzen Baum per `cp -a` ueber `~/linuxmintphotoframe`, also auch
+ueber die Datei, die bash gerade liest.
+
+**Nichts darf auf eine Eingabe warten oder unbegrenzt dauern.** Das Skript
+haelt die Sperre, an der der Neustart-Weg haengt. `GIT_TERMINAL_PROMPT=0` und
+Verwandte verhindern, dass git ein Passwortfenster aufmacht; `mit_frist`
+begrenzt Klon (300 s), Tests (300 s) und Setup (900 s).
+
+**Eine Marke wird nie fuer nichts verbraucht.** Der Stempel wird *vor* dem
+Handeln geschrieben, damit ein Schreibfehler keine Schleife ausloest. Laesst
+sich das Deploy dann aber gar nicht starten, gaelte dieselbe Marke nie wieder
+als neu — das Update waere still verloren. Der Watchdog nimmt den Stempel
+darum zurueck und versucht es beim naechsten Durchlauf erneut. Aus demselben
+Grund liest er waehrend eines laufenden Deploys **keine** der beiden Marken.
+
+**Warum die neue Oberflaeche ueberhaupt sichtbar wird.** Firefox wird hier per
+`setsid -f` gestartet und haengt in keiner systemd-Unit. Ein
+`systemctl --user restart …-browser.service` ruft darum nur den Starter erneut
+auf; der sieht "laeuft schon", holt das Fenster nach vorn — und die *Seite*
+wird nie neu geladen. Einen naechtlichen Neustart gibt es auf dem Rahmen
+nicht, die alte `app.js` blieb also beliebig lange stehen. Der Server liefert
+deshalb in `/api/content` ein `app_version` (Fingerabdruck von `index.html`,
+`app.js`, `styles.css`); aendert es sich, laedt die Seite sich beim naechsten
+Inhaltsabruf selbst neu — innerhalb von `content_reload_seconds`, ohne
+schwarzes Bild und ohne dass jemand Firefox abschiessen muss.
 
 Liegen beide Marken gleichzeitig neu an, **wartet der Neustart auf das
 Deploy**. Die zwei Aufrufe zu ordnen genuegt dafuer nicht: das Deploy laeuft

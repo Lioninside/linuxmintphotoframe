@@ -155,6 +155,49 @@ check("nach UPDATE_WAIT_MAX_SEC gewinnt der Notweg", len(reboots) == vor_notfall
       f"{w.UPDATE_WAIT_MAX_SEC}s -- der Neustart ist der letzte Weg in die Maschine")
 fcntl.flock(sperre, fcntl.LOCK_UN); sperre.close()
 
+# --- eine Update-Marke darf nicht fuer nichts verbraucht werden -----------
+#
+# _new_mark schreibt den Stempel *vor* dem Handeln -- richtig so, sonst liefe
+# ein Fehler beim Schreiben in eine Schleife. Nur: laesst sich das Deploy gar
+# nicht erst starten, gilt dieselbe Marke nie wieder als neu. Vor dem Rahmen
+# sitzt niemand; das Deploy waere still verloren.
+w._update_wartet_seit = 0.0
+w._do_update = lambda: (updates.append(1), reihenfolge.append("update"), False)[2]
+vor_fehlstart = len(updates)
+stempel_davor = u_stamp.read_text(encoding="utf-8").strip()
+update.write_text("2026-09-29 scheitert\n", encoding="utf-8")
+w._check_command_files()
+check("gescheiterter Start wird ueberhaupt versucht", len(updates) == vor_fehlstart + 1)
+check("Marke nach gescheitertem Start zurueckgenommen",
+      u_stamp.read_text(encoding="utf-8").strip() == stempel_davor,
+      f"Stempel steht auf {u_stamp.read_text(encoding='utf-8').strip()!r}")
+
+w._do_update = lambda: (updates.append(1), reihenfolge.append("update"), True)[2]
+w._check_command_files()
+check("dieselbe Marke wird danach erneut versucht", len(updates) == vor_fehlstart + 2,
+      "sonst ist das Deploy fuer immer verloren")
+check("und nach dem geglueckten Start gemerkt",
+      u_stamp.read_text(encoding="utf-8").strip() == "2026-09-29 scheitert")
+
+# Dasselbe von der anderen Seite: kommt eine neue Marke herein, waehrend schon
+# ein Deploy laeuft, wuerde sie gelesen den Stempel verbrauchen -- und das
+# zweite Skript liefe bloss in sein `flock -n` und beendete sich. Ergebnis:
+# eine Marke weniger, kein Deploy mehr. Sie muss also liegenbleiben.
+w._update_wartet_seit = 0.0
+sperre = open(w.UPDATE_LOCK_FILE, "a")
+fcntl.flock(sperre, fcntl.LOCK_EX | fcntl.LOCK_NB)
+vor_parallel = len(updates)
+update.write_text("2026-09-29 waehrenddessen\n", encoding="utf-8")
+w._check_command_files()
+check("Marke waehrend laufendem Deploy nicht gelesen", len(updates) == vor_parallel)
+check("und nicht verbraucht",
+      u_stamp.read_text(encoding="utf-8").strip() != "2026-09-29 waehrenddessen",
+      "sonst faellt genau das Update aus, das jemand gerade angefordert hat")
+fcntl.flock(sperre, fcntl.LOCK_UN); sperre.close()
+w._update_wartet_seit = 0.0
+w._check_command_files()
+check("nach dem Deploy greift sie", len(updates) == vor_parallel + 1)
+
 # --- das Skript muss es geben --------------------------------------------
 skript = Path(__file__).resolve().parent / "photoframe_selfupdate.sh"
 check("photoframe_selfupdate.sh liegt daneben", skript.exists(), str(skript))
@@ -170,6 +213,50 @@ if treffer:
     check("Watchdog und Skript meinen dieselbe Sperrdatei",
           treffer.group(1) == w.UPDATE_LOCK_FILE.name,
           f"Skript: {treffer.group(1)} / Watchdog: {w.UPDATE_LOCK_FILE.name}")
+
+# --- das Deploy muss den Dienste-Neustart ueberleben ----------------------
+#
+# Zwei Kopplungen, die nirgends sonst auffallen, weil beide lautlos brechen.
+skript_text = skript.read_text(encoding="utf-8")
+setup_text = (Path(__file__).resolve().parent / "kiosk_setup.sh").read_text(encoding="utf-8")
+
+# 1. `setsid` loest die Prozessgruppe, nicht die Cgroup. Startet
+#    kiosk_setup.sh den Watchdog neu, raeumt systemd dessen ganze Cgroup ab --
+#    samt Deploy, mitten in der Installation. Von Hand getestet faellt das nie
+#    auf, weil das Deploy dann an der Login-Session haengt.
+check("Deploy laeuft in einer eigenen systemd-Unit",
+      "systemd-run --user" in skript_text,
+      "setsid allein verlaesst die Cgroup des Watchdogs nicht")
+
+# 2. Der Riegel davor: das Skript setzt die Variable, kiosk_setup.sh liest
+#    sie. Ein Tippfehler auf einer der beiden Seiten heisst, dass der Watchdog
+#    doch neu gestartet wird -- ohne jede Meldung.
+check("Selbstupdate schiebt den Watchdog-Neustart auf",
+      "FRAME_SETUP_WATCHDOG_RESTART=defer" in skript_text)
+check("kiosk_setup.sh liest dieselbe Variable",
+      "FRAME_SETUP_WATCHDOG_RESTART" in setup_text,
+      "sonst startet das Setup den Watchdog doch und nimmt das Deploy mit")
+check("und das Skript holt den Neustart am Ende nach",
+      "restart linuxmintphotoframe-watchdog.service" in skript_text,
+      "sonst laeuft der Watchdog nach dem Update mit altem Code weiter")
+
+# 3. Nichts darf auf eine Eingabe warten oder unbegrenzt dauern: das Skript
+#    haelt dabei die Sperre, an der der Neustart-Notweg haengt.
+check("git kann nicht nach einem Passwort fragen",
+      "GIT_TERMINAL_PROMPT=0" in skript_text)
+check("die langen Schritte haben eine Zeitgrenze",
+      skript_text.count("mit_frist ") >= 3,
+      f"{skript_text.count('mit_frist ')} Aufrufe -- Klon, Tests und Setup gehoeren begrenzt")
+
+# 4. Firefox laeuft ausserhalb jeder Unit. Nur der Versionsvergleich in
+#    app.js sorgt dafuer, dass eine neue Oberflaeche ueberhaupt sichtbar wird.
+app_js = (Path(__file__).resolve().parents[2] / "app" / "app.js").read_text(encoding="utf-8")
+server_py = (Path(__file__).resolve().parent / "photoframe_server.py").read_text(encoding="utf-8")
+check("Server liefert eine Kennung der Oberflaeche",
+      '"app_version"' in server_py)
+check("und die Seite laedt sich neu, wenn sie sich aendert",
+      "app_version" in app_js and "location.reload()" in app_js,
+      "sonst zeigt der Rahmen nach einem Update die alte app.js weiter")
 
 print("\nFAILED:", fails if fails else "keine")
 sys.exit(1 if fails else 0)

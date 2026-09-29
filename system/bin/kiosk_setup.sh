@@ -152,10 +152,25 @@ install_systemd_units() {
     #
     # Der Browser gehoert dazu: Firefox liest app.js und styles.css beim
     # Seitenstart. Ohne Neustart zeigt er die alte Oberflaeche weiter.
+    # Den Watchdog waehrend eines Selbstupdates in Ruhe lassen.
+    #
+    # photoframe_selfupdate.sh wird vom Watchdog gestartet. `systemctl restart`
+    # raeumt die ganze Cgroup der Unit ab, und je nachdem, wie das Deploy
+    # abgekoppelt wurde, haengt es noch darin -- dann bricht es genau hier ab,
+    # mitten in der Installation, ohne Log und ohne frame-version.txt. Das
+    # Skript setzt darum FRAME_SETUP_WATCHDOG_RESTART=defer und startet den
+    # Watchdog selbst, wenn das Setup durch ist. Von Hand aufgerufen ist die
+    # Variable leer und alles laeuft wie bisher.
     for unit in linuxmintphotoframe-server.service \
                 linuxmintphotoframe-sync.timer \
                 linuxmintphotoframe-browser.service \
                 linuxmintphotoframe-watchdog.service; do
+        if [[ "${unit}" == "linuxmintphotoframe-watchdog.service" && \
+              "${FRAME_SETUP_WATCHDOG_RESTART:-}" == "defer" ]]; then
+            systemctl --user enable "${unit}" >/dev/null 2>&1 || true
+            ok "Watchdog-Neustart aufgeschoben (Selbstupdate laeuft)"
+            continue
+        fi
         systemctl --user enable "${unit}" >/dev/null 2>&1 || true
         systemctl --user restart "${unit}"
     done

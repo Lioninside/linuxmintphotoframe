@@ -143,6 +143,31 @@ def _do_reboot() -> bool:
     return False
 
 
+def _stempel_lesen(stamp_file: Path) -> str | None:
+    """Den gemerkten Stand lesen. None heisst: es gibt noch keinen."""
+    try:
+        return stamp_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
+def _stempel_schreiben(stamp_file: Path, wert: str | None) -> None:
+    """Einen Stempel zuruecksetzen, damit dieselbe Marke nochmal zaehlt.
+
+    `wert is None` heisst: es gab vorher keinen Stempel. Die Datei wird dann
+    geloescht, nicht geleert -- ein leerer Stempel liesse die naechste Marke
+    als "erstmals gesehen" durchgehen, und die wuerde wieder nichts ausloesen.
+    """
+    try:
+        if wert is None:
+            stamp_file.unlink(missing_ok=True)
+        else:
+            stamp_file.write_text(wert, encoding="utf-8")
+    except OSError as exc:  # noqa: BLE001
+        LOG.error("Could not roll back %s (%r) — the mark is spent, a new "
+                  "update needs a new one", stamp_file, exc)
+
+
 def _new_mark(candidates: list[Path], stamp_file: Path, what: str) -> str | None:
     """Die Marke aus der ersten vorhandenen Befehlsdatei lesen, wenn sie neu ist.
 
@@ -248,22 +273,39 @@ def _check_command_files() -> None:
     global _update_wartet_seit
     now = time.time()
 
-    if _new_mark(UPDATE_FILES, UPDATE_STAMP_FILE, "update"):
-        _do_update()
-        _update_wartet_seit = now
-        return
-
+    # Laeuft schon ein Deploy, wird in diesem Durchlauf *keine* der beiden
+    # Marken gelesen. Beide bleiben liegen und greifen, sobald es durch ist.
+    #
+    # Fuer die Update-Marke ist das der Punkt: gelesen wuerde sie den Stempel
+    # verbrauchen, das zweite Skript liefe sofort in sein `flock -n` und
+    # beendete sich -- und dieselbe Marke gaelte nie wieder als neu. Das
+    # Deploy waere still verloren.
     if _update_laeuft():
         if not _update_wartet_seit:
             _update_wartet_seit = now
         gewartet = now - _update_wartet_seit
         if gewartet < UPDATE_WAIT_MAX_SEC:
-            LOG.info("Update running for %ds — reboot mark left unread", int(gewartet))
+            LOG.info("Update running for %ds — marks left unread", int(gewartet))
             return
         LOG.warning("Update running for %ds and blocking the emergency path — "
                     "reading the reboot mark anyway", int(gewartet))
     else:
         _update_wartet_seit = 0.0
+
+        # Den Stempel *vor* dem Lesen sichern. _new_mark schreibt ihn sofort
+        # fort, damit ein Fehler beim Schreiben keine Schleife ausloest. Laesst
+        # sich das Deploy dann aber gar nicht erst starten, waere es ohne diese
+        # Sicherung fuer immer verloren: dieselbe Marke gilt nie wieder als neu.
+        vorheriger_stempel = _stempel_lesen(UPDATE_STAMP_FILE)
+        if _new_mark(UPDATE_FILES, UPDATE_STAMP_FILE, "update"):
+            if _do_update():
+                _update_wartet_seit = now
+            else:
+                _stempel_schreiben(UPDATE_STAMP_FILE, vorheriger_stempel)
+                LOG.error("Update could not be started — mark rolled back, "
+                          "retrying on the next pass")
+            # Die Neustart-Marke bleibt in diesem Durchlauf ungelesen.
+            return
 
     if _new_mark(REBOOT_FILES, REBOOT_STAMP_FILE, "reboot"):
         if not _do_reboot():

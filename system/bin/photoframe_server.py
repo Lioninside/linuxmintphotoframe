@@ -8,6 +8,7 @@ KioskContent/{common,mint2}.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import mimetypes
 import os
@@ -149,6 +150,30 @@ def send_first_existing(handler: BaseHTTPRequestHandler, roots: list[Path], rel:
     handler.send_error(HTTPStatus.NOT_FOUND)
 
 
+def app_version() -> str:
+    """Ein Fingerabdruck der ausgelieferten Oberflaeche.
+
+    Firefox startet hier per `setsid -f`, haengt also in keiner systemd-Unit.
+    Ein `systemctl --user restart ...-browser.service` ruft darum nur den
+    Starter erneut auf; der sieht "laeuft schon", holt das Fenster nach vorn
+    und ist fertig -- die *Seite* wird nie neu geladen. Nach einem
+    Selbstupdate lag die neue app.js also auf der Platte, und der Rahmen
+    zeigte trotzdem die alte Oberflaeche weiter. Einen naechtlichen Neustart
+    gibt es hier nicht, das konnte also beliebig lange so bleiben.
+
+    Statt Firefox dafuer abzuschiessen bekommt die Seite hier eine Kennung.
+    Aendert sie sich, laedt die Seite sich beim naechsten Inhaltsabruf selbst
+    neu -- innerhalb von content_reload_seconds und ohne schwarzes Bild.
+    """
+    h = hashlib.sha256()
+    for name in ("index.html", "app.js", "styles.css"):
+        try:
+            h.update(f"{name}:{(APP_DIR / name).stat().st_mtime_ns}".encode())
+        except OSError:
+            h.update(f"{name}:-".encode())
+    return h.hexdigest()[:12]
+
+
 def content_payload() -> dict:
     config = {**DEFAULT_CONFIG}
     config.update(load_json_file(EXAMPLES_DIR / "config.json", {}))
@@ -156,6 +181,7 @@ def content_payload() -> dict:
     config.update(load_json_file(MINT2_DIR / "config.json", {}))
     return {
         "generated_at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
+        "app_version": app_version(),
         "data_dir": str(DATA_DIR),
         "config": config,
         "photos": list_photos(),

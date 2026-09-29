@@ -112,18 +112,64 @@ check("fehlende Update-Datei loest nichts aus", len(updates) == 1)
 check("Stempel bleibt nach fehlender Datei",
       u_stamp.read_text(encoding="utf-8").strip() == "2026-09-28 jetzt")
 
-# --- beides gleichzeitig: erst ausrollen, dann neu starten ----------------
+# --- beides gleichzeitig: der Neustart wartet auf das Deploy --------------
+#
+# Die blosse Startreihenfolge genuegt nicht -- genau daran hat ein fruehrerer
+# Test vorbeigemessen. _do_update() kehrt sofort zurueck, waehrend das Deploy
+# abgekoppelt weiterlaeuft. Ein Neustart im selben Durchlauf faellt also
+# mitten in die Installation.
+import fcntl  # noqa: E402
+import time  # noqa: E402
+
 reihenfolge.clear()
+vor = len(reboots)
 update.write_text("2026-09-28 beides\n", encoding="utf-8")
 neustart.write_text("2026-09-28 beides\n", encoding="utf-8")
 w._check_command_files()
-check("erst Update, dann Neustart", reihenfolge == ["update", "reboot"],
-      f"{reihenfolge} -- sonst startet der Rahmen neu, bevor der neue Stand liegt")
+check("Update gestartet", reihenfolge == ["update"], f"{reihenfolge}")
+check("Neustart im selben Durchlauf unterbleibt", len(reboots) == vor,
+      "sonst startet der Rahmen mitten in die Installation")
+check("Neustart-Marke nicht verbraucht",
+      n_stamp.read_text(encoding="utf-8").strip() != "2026-09-28 beides",
+      "sonst ist der Neustart fuer immer verloren")
+
+sperre = open(w.UPDATE_LOCK_FILE, "a")
+fcntl.flock(sperre, fcntl.LOCK_EX | fcntl.LOCK_NB)
+w._check_command_files()
+check("waehrend das Deploy laeuft, bleibt der Neustart aus", len(reboots) == vor)
+
+fcntl.flock(sperre, fcntl.LOCK_UN); sperre.close()
+w._check_command_files()
+check("nach dem Deploy wird neu gestartet", len(reboots) == vor + 1, f"{len(reboots) - vor}")
+
+# Ein haengendes Deploy darf den Notweg nicht auf Dauer verstellen.
+sperre = open(w.UPDATE_LOCK_FILE, "a")
+fcntl.flock(sperre, fcntl.LOCK_EX | fcntl.LOCK_NB)
+neustart.write_text("2026-09-28 notfall\n", encoding="utf-8")
+vor_notfall = len(reboots)
+w._check_command_files()
+check("haengendes Deploy haelt den Neustart zunaechst zurueck", len(reboots) == vor_notfall)
+w._update_wartet_seit = time.time() - w.UPDATE_WAIT_MAX_SEC - 1
+w._check_command_files()
+check("nach UPDATE_WAIT_MAX_SEC gewinnt der Notweg", len(reboots) == vor_notfall + 1,
+      f"{w.UPDATE_WAIT_MAX_SEC}s -- der Neustart ist der letzte Weg in die Maschine")
+fcntl.flock(sperre, fcntl.LOCK_UN); sperre.close()
 
 # --- das Skript muss es geben --------------------------------------------
 skript = Path(__file__).resolve().parent / "photoframe_selfupdate.sh"
 check("photoframe_selfupdate.sh liegt daneben", skript.exists(), str(skript))
 check("Watchdog sucht es genau dort", w.UPDATE_SCRIPT == skript, str(w.UPDATE_SCRIPT))
+
+# Der Watchdog erkennt ein laufendes Deploy an dessen Sperrdatei. Meinen die
+# zwei verschiedene Dateien, greift der Schutz nie -- und zwar lautlos.
+import re  # noqa: E402
+treffer = re.search(r'^LOCK_FILE="\$\{STATE_DIR\}/([^"]+)"',
+                    skript.read_text(encoding="utf-8"), re.M)
+check("Sperrdatei im Skript gefunden", treffer is not None)
+if treffer:
+    check("Watchdog und Skript meinen dieselbe Sperrdatei",
+          treffer.group(1) == w.UPDATE_LOCK_FILE.name,
+          f"Skript: {treffer.group(1)} / Watchdog: {w.UPDATE_LOCK_FILE.name}")
 
 print("\nFAILED:", fails if fails else "keine")
 sys.exit(1 if fails else 0)
